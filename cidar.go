@@ -200,11 +200,11 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		hh := (seconds / (60 * 60)) % 24
 
 		if hh == 0 && mm != 0 {
-			t = fmt.Sprintf("%02d minutes(s) %02d second(s)", mm, ss)
+			t = fmt.Sprintf("%02d:%02d", mm, ss)
 		} else if hh == 0 && mm == 0 {
-			t = fmt.Sprintf("%02d second(s)", ss)
+			t = fmt.Sprintf("%02d", ss)
 		} else {
-			t = fmt.Sprintf("%d hour(s) %02d minutes(s) %02d second(s)", hh, mm, ss)
+			t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
 		}
 
 		useWebhook, hasUseWebhook := os.LookupEnv("USE_WEBHOOK")
@@ -223,8 +223,8 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					Color:       16449599,
 					URL:         song.Data[0].Attributes.URL,
 					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider\n" + "Album: " + song.Data[0].Attributes.AlbumName,
-					Footer:      &discordgo.MessageEmbedFooter{Text: "Release: " + song.Data[0].Attributes.ReleaseDate + " - Duration: " + t, IconURL: message.Author.AvatarURL("")},
+					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider\n",
+					Footer:      &discordgo.MessageEmbedFooter{Text: t + " • " + song.Data[0].Attributes.ReleaseDate, IconURL: message.Author.AvatarURL("")},
 				}},
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
