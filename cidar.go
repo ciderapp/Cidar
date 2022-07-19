@@ -193,14 +193,27 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			content = strings.ReplaceAll(message.Content, origMessageUrl, "(embed)")
 		}
 
-		webhook, err := session.Webhook(os.Getenv("WEBHOOK_ID"))
-		if err != nil {
-			log.Println(err)
-			return
+		var t string
+		seconds := song.Data[0].Attributes.DurationInMillis / 1000
+		ss := seconds % 60
+		mm := (seconds / 60) % 60
+		hh := (seconds / (60 * 60)) % 24
+
+		if hh == 0 && mm != 0 {
+			t = fmt.Sprintf("%02d minutes(s) %02d second(s)", mm, ss)
+		} else if hh == 0 && mm == 0 {
+			t = fmt.Sprintf("%02d second(s)", ss)
+		} else {
+			t = fmt.Sprintf("%d hour(s) %02d minutes(s) %02d second(s)", hh, mm, ss)
 		}
 
 		useWebhook, hasUseWebhook := os.LookupEnv("USE_WEBHOOK")
 		if hasUseWebhook && useWebhook == "true" {
+			webhook, err := session.WebhookCreate(message.ChannelID, "temporary-cidar", "")
+			if err != nil {
+				log.Println(err)
+				return
+			}
 			_, err = session.WebhookExecute(webhook.ID, webhook.Token, false, &discordgo.WebhookParams{
 				AvatarURL: message.Author.AvatarURL(""),
 				Username:  message.Author.Username,
@@ -210,8 +223,8 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					Color:       16449599,
 					URL:         song.Data[0].Attributes.URL,
 					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-					Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
-					// Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
+					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider\n" + "Album: " + song.Data[0].Attributes.AlbumName,
+					Footer:      &discordgo.MessageEmbedFooter{Text: "Release: " + song.Data[0].Attributes.ReleaseDate + " - Duration: " + t, IconURL: message.Author.AvatarURL("")},
 				}},
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
@@ -234,13 +247,11 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println(err)
 				return
 			}
+			err = session.WebhookDelete(webhook.ID)
+			if err != nil {
+				log.Println(err)
+			}
 		} else {
-			seconds := song.Data[0].Attributes.DurationInMillis / 1000
-			ss := seconds % 60
-			mm := (seconds / 60) % 60
-			hh := (seconds / (60 * 60)) % 24
-			t := fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
-
 			_, err = session.ChannelMessageSendComplex(
 				message.ChannelID,
 				&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
