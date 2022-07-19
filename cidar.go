@@ -230,6 +230,12 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				return
 			}
 		} else {
+			seconds := song.Data[0].Attributes.DurationInMillis / 1000
+			ss := seconds % 60
+			mm := (seconds / 60) % 60
+			hh := (seconds / (60 * 60)) % 24
+			t := fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
+
 			_, err = session.ChannelMessageSendComplex(
 				message.ChannelID,
 				&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
@@ -237,7 +243,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					Color:       16449599,
 					URL:         song.Data[0].Attributes.URL,
 					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-					Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
+					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider\n" + "Album: " + song.Data[0].Attributes.AlbumName + "\nRelease: " + song.Data[0].Attributes.ReleaseDate + "\nDuration: " + t,
 					Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
 				}, Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
