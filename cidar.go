@@ -111,7 +111,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Author.ID == session.State.User.ID {
 		return
 	}
-	
+
 	if urlRegexp.MatchString(message.Content) {
 		messageUrl := urlRegexp.FindString(message.Content)
 		if !spotifyRegexp.MatchString(messageUrl) && !appleRegexp.MatchString(messageUrl) {
@@ -176,16 +176,28 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		modLink := strings.ReplaceAll(song.Data[0].Attributes.URL, "https://", "")
 		playLink := "https://cider.sh/p?" + modLink
 		viewLink := "https://cider.sh/o?" + modLink
-		_, err = session.ChannelMessageSendComplex(
-			message.ChannelID,
-			&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
+		webhook, err := session.WebhookCreate(message.ChannelID, message.Author.Username, "")
+		if err != nil {
+			log.Println(err)
+		}
+		content := ""
+		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, messageUrl, ""))) != 0 {
+			content = strings.ReplaceAll(message.Content, messageUrl, fmt.Sprintf("[link](%s)", viewLink))
+		}
+
+		_, err = session.WebhookExecute(webhook.ID, webhook.Token, false, &discordgo.WebhookParams{
+			AvatarURL: message.Author.AvatarURL(""),
+			Username:  message.Author.Username,
+			Content:   content,
+			Embeds: []*discordgo.MessageEmbed{{
 				Title:       song.Data[0].Attributes.Name,
 				Color:       16449599,
 				URL:         song.Data[0].Attributes.URL,
 				Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
 				Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
-				Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
-			}, Components: []discordgo.MessageComponent{
+				// Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
+			}},
+			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
 						discordgo.Button{
@@ -200,8 +212,9 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 						},
 					},
 				},
-			}},
-		)
+			},
+		})
+		err = session.WebhookDelete(webhook.ID)
 		if err != nil {
 			log.Println(err)
 			return
