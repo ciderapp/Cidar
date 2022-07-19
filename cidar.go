@@ -114,6 +114,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 
 	if urlRegexp.MatchString(message.Content) {
 		messageUrl := urlRegexp.FindString(message.Content)
+		origMessageUrl := messageUrl
 		if !spotifyRegexp.MatchString(messageUrl) && !appleRegexp.MatchString(messageUrl) {
 			return
 		}
@@ -182,7 +183,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		}
 		content := ""
 		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, messageUrl, ""))) != 0 {
-			content = strings.ReplaceAll(message.Content, messageUrl, fmt.Sprintf("[link](%s)", viewLink))
+			content = strings.ReplaceAll(message.Content, origMessageUrl, fmt.Sprintf("[link](%s)", viewLink))
 		}
 
 		_, err = session.WebhookExecute(webhook.ID, webhook.Token, false, &discordgo.WebhookParams{
