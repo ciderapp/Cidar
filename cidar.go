@@ -143,11 +143,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			}
 			messageUrl = songs.LinksByPlatform.AppleMusic.URL
 			if len(messageUrl) < 1 {
-				_, _ = session.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
-					Title:       "Spotify Error",
-					Color:       16449599,
-					Description: "Could not convert Spotify link to Apple Music link",
-				})
+				_, _ = session.ChannelMessageSendReply(message.ChannelID, "Could not convert Spotify link to Apple Music link", message.Reference())
 				return
 			}
 		}
