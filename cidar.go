@@ -224,7 +224,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					URL:         song.Data[0].Attributes.URL,
 					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
 					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider",
-					Footer:      &discordgo.MessageEmbedFooter{Text: t + " • " + song.Data[0].Attributes.ReleaseDate, IconURL: message.Author.AvatarURL("")},
+					Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate, IconURL: message.Author.AvatarURL("")},
 				}},
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
