@@ -1,17 +1,26 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
+	"github.com/mileusna/crontab"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
+	"strings"
 	"syscall"
 )
 
 var discordSession *discordgo.Session
+
+var DeveloperToken string
+
 var urlRegexp *regexp.Regexp
 var appleRegexp *regexp.Regexp
 var spotifyRegexp *regexp.Regexp
@@ -20,12 +29,15 @@ func main() {
 	log.SetPrefix("[Cidar] ")
 
 	log.Println("Starting discord bot")
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Could not load dotenv file")
-		return
+	_, hasToken := os.LookupEnv("TOKEN")
+	if !hasToken {
+		err := godotenv.Load()
+		if err != nil {
+			log.Println("Could not load dotenv file")
+			return
+		}
 	}
-	discordSession, err = discordgo.New(fmt.Sprintf("Bot %s", os.Getenv("TOKEN")))
+	discordSession, err := discordgo.New(fmt.Sprintf("Bot %s", os.Getenv("TOKEN")))
 	if err != nil {
 		log.Println(fmt.Sprintf("err:%s", err.Error()))
 	}
@@ -55,6 +67,39 @@ func main() {
 		log.Fatalln("Failed to compile spotify regex")
 	}
 
+	// Cronjobs
+	ctab := crontab.New()
+	ctab.MustAddJob("0 * * * *", func() { // Every Hour
+		var client http.Client
+		req, err := http.NewRequest("GET", "https://api.cider.sh/v1", nil)
+		if err != nil {
+			log.Println(err)
+		}
+
+		req.Header = http.Header{
+			"User-Agent": []string{"Cider"},
+		}
+
+		res, err := client.Do(req)
+		if res.Body == nil {
+			log.Println(err)
+		}
+
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Println(err)
+		}
+
+		var tokenJson map[string]interface{}
+		err = json.Unmarshal(body, &tokenJson)
+		if err != nil {
+			log.Println(err)
+		}
+		DeveloperToken = tokenJson["token"].(string)
+	}) // Every 30 minutes
+
+	ctab.RunAll()
+
 	discordSession.AddHandler(test)
 	defer discordSession.Close()
 	sc := make(chan os.Signal, 1)
@@ -63,25 +108,104 @@ func main() {
 }
 
 func test(session *discordgo.Session, message *discordgo.MessageCreate) {
-	if message.GuildID != "922716538212081664" {
-		return
-	}
 	if message.Author.ID == session.State.User.ID {
 		return
 	}
-	log.Println(message.Content)
+	
 	if urlRegexp.MatchString(message.Content) {
-		url := urlRegexp.FindString(message.Content)
-		log.Println(url)
-		if appleRegexp.MatchString(url) {
-			log.Println("apple")
-		} else if spotifyRegexp.MatchString(url) {
-			log.Println("spotify")
-		} else {
-			log.Println("nether")
+		messageUrl := urlRegexp.FindString(message.Content)
+		if !spotifyRegexp.MatchString(messageUrl) && !appleRegexp.MatchString(messageUrl) {
+			return
 		}
-	}
-	if message.Content == "maringaming" {
-		session.ChannelMessageSend(message.ChannelID, "yees")
+		if spotifyRegexp.MatchString(messageUrl) {
+			req, err := http.Get("https://api.song.link/v1-alpha.1/links?url=" + messageUrl)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			if req.StatusCode != 200 {
+				return
+			}
+			b, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			var songs Link
+			err = json.Unmarshal(b, &songs)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			messageUrl = songs.LinksByPlatform.AppleMusic.URL
+		}
+		uri, _ := url.ParseRequestURI(messageUrl)
+		values := uri.Query()
+		id := values.Get("i")
+		client := http.Client{}
+		req, err := http.NewRequest("GET", fmt.Sprintf("https://api.music.apple.com/v1/catalog/%s/songs/%s", "us", id), nil)
+		if err != nil {
+			log.Println(err)
+		}
+
+		req.Header = http.Header{
+			"Authorization": []string{"Bearer " + DeveloperToken},
+		}
+
+		res, err := client.Do(req)
+		if res.Body == nil {
+			log.Println(err)
+		}
+
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			log.Println(err)
+		}
+		if res.StatusCode != 200 {
+			return
+		}
+
+		var song Song
+		err = json.Unmarshal(body, &song)
+		if err != nil {
+			log.Println(err)
+		}
+
+		song.Data[0].Attributes.Artwork.URL = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+
+		modLink := strings.ReplaceAll(song.Data[0].Attributes.URL, "https://", "")
+		playLink := "https://cider.sh/p?" + modLink
+		viewLink := "https://cider.sh/o?" + modLink
+		_, err = session.ChannelMessageSendComplex(
+			message.ChannelID,
+			&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
+				Title:       song.Data[0].Attributes.Name,
+				Color:       16449599,
+				URL:         song.Data[0].Attributes.URL,
+				Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
+				Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
+				Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
+			}, Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label: "Play In Cider",
+							Style: discordgo.LinkButton,
+							URL:   playLink,
+						},
+						discordgo.Button{
+							Label: "View In Cider",
+							Style: discordgo.LinkButton,
+							URL:   viewLink,
+						},
+					},
+				},
+			}},
+		)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		_ = session.ChannelMessageDelete(message.ChannelID, message.ID)
 	}
 }
