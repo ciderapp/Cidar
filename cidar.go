@@ -129,6 +129,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println("non 200", req.Status)
 				return
 			}
+			defer req.Body.Close()
 			b, err := ioutil.ReadAll(req.Body)
 			if err != nil {
 				log.Println(err)
@@ -141,6 +142,14 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				return
 			}
 			messageUrl = songs.LinksByPlatform.AppleMusic.URL
+			if len(messageUrl) < 1 {
+				_, _ = session.ChannelMessageSendEmbed(message.ChannelID, &discordgo.MessageEmbed{
+					Title:       "Spotify Error",
+					Color:       16449599,
+					Description: "Could not convert Spotify link to Apple Music link",
+				})
+				return
+			}
 		}
 		uri, _ := url.ParseRequestURI(messageUrl)
 		values := uri.Query()
