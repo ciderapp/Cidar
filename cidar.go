@@ -223,7 +223,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					Color:       16449599,
 					URL:         song.Data[0].Attributes.URL,
 					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider\n",
+					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider",
 					Footer:      &discordgo.MessageEmbedFooter{Text: t + " • " + song.Data[0].Attributes.ReleaseDate, IconURL: message.Author.AvatarURL("")},
 				}},
 				Components: []discordgo.MessageComponent{
