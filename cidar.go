@@ -194,38 +194,72 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			return
 		}
 
-		_, err = session.WebhookExecute(webhook.ID, webhook.Token, false, &discordgo.WebhookParams{
-			AvatarURL: message.Author.AvatarURL(""),
-			Username:  message.Author.Username,
-			Content:   content,
-			Embeds: []*discordgo.MessageEmbed{{
-				Title:       song.Data[0].Attributes.Name,
-				Color:       16449599,
-				URL:         song.Data[0].Attributes.URL,
-				Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-				Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
-				// Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
-			}},
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{
-						discordgo.Button{
-							Label: "Play In Cider",
-							Style: discordgo.LinkButton,
-							URL:   playLink,
-						},
-						discordgo.Button{
-							Label: "View In Cider",
-							Style: discordgo.LinkButton,
-							URL:   viewLink,
+		useWebhook, hasUseWebhook := os.LookupEnv("USE_WEBHOOK")
+		if hasUseWebhook && useWebhook == "true" {
+			_, err = session.WebhookExecute(webhook.ID, webhook.Token, false, &discordgo.WebhookParams{
+				AvatarURL: message.Author.AvatarURL(""),
+				Username:  message.Author.Username,
+				Content:   content,
+				Embeds: []*discordgo.MessageEmbed{{
+					Title:       song.Data[0].Attributes.Name,
+					Color:       16449599,
+					URL:         song.Data[0].Attributes.URL,
+					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
+					Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
+					// Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
+				}},
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label: "Play In Cider",
+								Style: discordgo.LinkButton,
+								URL:   playLink,
+							},
+							discordgo.Button{
+								Label: "View In Cider",
+								Style: discordgo.LinkButton,
+								URL:   viewLink,
+							},
 						},
 					},
 				},
-			},
-		})
-		if err != nil {
-			log.Println(err)
-			return
+			})
+			if err != nil {
+				log.Println(err)
+				return
+			}
+		} else {
+			_, err = session.ChannelMessageSendComplex(
+				message.ChannelID,
+				&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
+					Title:       song.Data[0].Attributes.Name,
+					Color:       16449599,
+					URL:         song.Data[0].Attributes.URL,
+					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
+					Description: song.Data[0].Attributes.AlbumName + "\n" + song.Data[0].Attributes.ArtistName,
+					Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
+				}, Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label: "Play In Cider",
+								Style: discordgo.LinkButton,
+								URL:   playLink,
+							},
+							discordgo.Button{
+								Label: "View In Cider",
+								Style: discordgo.LinkButton,
+								URL:   viewLink,
+							},
+						},
+					},
+				}},
+			)
+			if err != nil {
+				log.Println(err)
+				return
+			}
 		}
 		_ = session.ChannelMessageDelete(message.ChannelID, message.ID)
 	}
