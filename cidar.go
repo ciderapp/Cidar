@@ -30,7 +30,8 @@ func main() {
 
 	log.Println("Starting discord bot")
 	_, hasToken := os.LookupEnv("TOKEN")
-	if !hasToken {
+	_, hasWebhookID := os.LookupEnv("WEBHOOK_ID")
+	if !hasToken || !hasWebhookID {
 		err := godotenv.Load()
 		if err != nil {
 			log.Println("Could not load dotenv file")
@@ -125,6 +126,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				return
 			}
 			if req.StatusCode != 200 {
+				log.Println("non 200", req.Status)
 				return
 			}
 			b, err := ioutil.ReadAll(req.Body)
@@ -177,13 +179,19 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		modLink := strings.ReplaceAll(song.Data[0].Attributes.URL, "https://", "")
 		playLink := "https://cider.sh/p?" + modLink
 		viewLink := "https://cider.sh/o?" + modLink
-		webhook, err := session.WebhookCreate(message.ChannelID, message.Author.Username, "")
+
 		if err != nil {
 			log.Println(err)
 		}
 		content := ""
-		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, messageUrl, ""))) != 0 {
-			content = strings.ReplaceAll(message.Content, origMessageUrl, fmt.Sprintf("[link](%s)", viewLink))
+		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, origMessageUrl, ""))) != 0 {
+			content = strings.ReplaceAll(message.Content, origMessageUrl, "(embed)")
+		}
+
+		webhook, err := session.Webhook(os.Getenv("WEBHOOK_ID"))
+		if err != nil {
+			log.Println(err)
+			return
 		}
 
 		_, err = session.WebhookExecute(webhook.ID, webhook.Token, false, &discordgo.WebhookParams{
@@ -215,7 +223,6 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				},
 			},
 		})
-		err = session.WebhookDelete(webhook.ID)
 		if err != nil {
 			log.Println(err)
 			return
