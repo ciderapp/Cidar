@@ -193,7 +193,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				urlEmbed = song.Data[0].Attributes.URL
 				thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
 				description = "Listen to " + song.Data[0].Attributes.Name + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
-				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(song.Data[0].Relationships.Tracks.Data)) + " • " + t
+				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(song.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 			} else if strings.Contains(uri.Path, "playlist") {
 				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", "us", path.Base(uri.Path)), nil)
 				if err != nil {
@@ -226,7 +226,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				urlEmbed = song.Data[0].Attributes.URL
 				thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
 				description = "Listen to " + song.Data[0].Attributes.Name + " by " + song.Data[0].Attributes.CuratorName + " on Cider"
-				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(song.Data[0].Relationships.Tracks.Data)) + " • " + t
+				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(song.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 			}
 		} else {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
