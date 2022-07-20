@@ -151,11 +151,23 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		id := values.Get("i")
 		var body []byte
 		var err error
+		var t string
+
 		if len(id) == 0 {
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", "us", path.Base(uri.Path)), nil)
-			if err != nil {
-				log.Println(err)
-				return
+			if strings.Contains(uri.Path, "album") {
+				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", "us", path.Base(uri.Path)), nil)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				t = "Album"
+			} else if strings.Contains(uri.Path, "playlist") {
+				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", "us", path.Base(uri.Path)), nil)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				t = "Playlist"
 			}
 		} else {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
@@ -184,7 +196,6 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, origMessageUrl, ""))) != 0 {
 			content = strings.ReplaceAll(message.Content, origMessageUrl, "(embed)")
 		}
-		var t string
 		if song.Data[0].Attributes.DurationInMillis > 0 {
 			seconds := song.Data[0].Attributes.DurationInMillis / 1000
 			ss := seconds % 60
@@ -197,8 +208,6 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			} else {
 				t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
 			}
-		} else {
-			t = "Album"
 		}
 
 		useWebhook, hasUseWebhook := os.LookupEnv("USE_WEBHOOK")
