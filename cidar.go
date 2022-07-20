@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -153,6 +154,12 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		var err error
 		var t string
 
+		var title string
+		var urlEmbed string
+		var thumbnail string
+		var description string
+		var footer string
+
 		if len(id) == 0 {
 			if strings.Contains(uri.Path, "album") {
 				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", "us", path.Base(uri.Path)), nil)
@@ -160,14 +167,66 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					log.Println(err)
 					return
 				}
-				t = "Album"
+				var song Album
+				err = json.Unmarshal(body, &song)
+				if err != nil {
+					log.Println(err)
+				}
+				var totalMills int
+				for i := 0; i < len(song.Data[0].Relationships.Tracks.Data); i++ {
+					totalMills += song.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
+				}
+				if totalMills > 0 {
+					seconds := totalMills / 1000
+					ss := seconds % 60
+					mm := (seconds / 60) % 60
+					hh := (seconds / (60 * 60)) % 24
+					if hh == 0 && mm != 0 {
+						t = fmt.Sprintf("%02d:%02d", mm, ss)
+					} else if hh == 0 && mm == 0 {
+						t = fmt.Sprintf("%02d", ss)
+					} else {
+						t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
+					}
+				}
+				title = song.Data[0].Attributes.Name
+				urlEmbed = song.Data[0].Attributes.URL
+				thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+				description = "Listen to " + song.Data[0].Attributes.Name + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
+				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(song.Data[0].Relationships.Tracks.Data)) + " • " + t
 			} else if strings.Contains(uri.Path, "playlist") {
 				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", "us", path.Base(uri.Path)), nil)
 				if err != nil {
 					log.Println(err)
 					return
 				}
-				t = "Playlist"
+				var song Playlist
+				err = json.Unmarshal(body, &song)
+				if err != nil {
+					log.Println(err)
+				}
+				var totalMills int
+				for i := 0; i < len(song.Data[0].Relationships.Tracks.Data); i++ {
+					totalMills += song.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
+				}
+				if totalMills > 0 {
+					seconds := totalMills / 1000
+					ss := seconds % 60
+					mm := (seconds / 60) % 60
+					hh := (seconds / (60 * 60)) % 24
+					if hh == 0 && mm != 0 {
+						t = fmt.Sprintf("%02d:%02d", mm, ss)
+					} else if hh == 0 && mm == 0 {
+						t = fmt.Sprintf("%02d", ss)
+					} else {
+						t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
+					}
+				}
+				title = song.Data[0].Attributes.Name
+				urlEmbed = song.Data[0].Attributes.URL
+				thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+				description = "Listen to " + song.Data[0].Attributes.Name + " by " + song.Data[0].Attributes.CuratorName + " on Cider"
+				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(song.Data[0].Relationships.Tracks.Data)) + " • " + t
 			}
 		} else {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
@@ -175,17 +234,32 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println(err)
 				return
 			}
+			var song Song
+			err = json.Unmarshal(body, &song)
+			if err != nil {
+				log.Println(err)
+			}
+			if song.Data[0].Attributes.DurationInMillis > 0 {
+				seconds := song.Data[0].Attributes.DurationInMillis / 1000
+				ss := seconds % 60
+				mm := (seconds / 60) % 60
+				hh := (seconds / (60 * 60)) % 24
+				if hh == 0 && mm != 0 {
+					t = fmt.Sprintf("%02d:%02d", mm, ss)
+				} else if hh == 0 && mm == 0 {
+					t = fmt.Sprintf("%02d", ss)
+				} else {
+					t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
+				}
+			}
+			title = song.Data[0].Attributes.Name
+			urlEmbed = song.Data[0].Attributes.URL
+			thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
+			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
 		}
 
-		var song Song
-		err = json.Unmarshal(body, &song)
-		if err != nil {
-			log.Println(err)
-		}
-
-		song.Data[0].Attributes.Artwork.URL = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
-
-		modLink := strings.ReplaceAll(song.Data[0].Attributes.URL, "https://", "")
+		modLink := strings.ReplaceAll(urlEmbed, "https://", "")
 		playLink := "https://cider.sh/p?" + modLink
 		viewLink := "https://cider.sh/o?" + modLink
 
@@ -195,19 +269,6 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		content := ""
 		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, origMessageUrl, ""))) != 0 {
 			content = strings.ReplaceAll(message.Content, origMessageUrl, "(embed)")
-		}
-		if song.Data[0].Attributes.DurationInMillis > 0 {
-			seconds := song.Data[0].Attributes.DurationInMillis / 1000
-			ss := seconds % 60
-			mm := (seconds / 60) % 60
-			hh := (seconds / (60 * 60)) % 24
-			if hh == 0 && mm != 0 {
-				t = fmt.Sprintf("%02d:%02d", mm, ss)
-			} else if hh == 0 && mm == 0 {
-				t = fmt.Sprintf("%02d", ss)
-			} else {
-				t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
-			}
 		}
 
 		useWebhook, hasUseWebhook := os.LookupEnv("USE_WEBHOOK")
@@ -222,12 +283,12 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				Username:  message.Author.Username,
 				Content:   content,
 				Embeds: []*discordgo.MessageEmbed{{
-					Title:       song.Data[0].Attributes.Name,
+					Title:       title,
 					Color:       16449599,
-					URL:         song.Data[0].Attributes.URL,
-					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider",
-					Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate, IconURL: message.Author.AvatarURL("")},
+					URL:         urlEmbed,
+					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: thumbnail},
+					Description: description,
+					Footer:      &discordgo.MessageEmbedFooter{Text: footer, IconURL: message.Author.AvatarURL("")},
 				}},
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
@@ -258,12 +319,12 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			_, err = session.ChannelMessageSendComplex(
 				message.ChannelID,
 				&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
-					Title:       song.Data[0].Attributes.Name,
+					Title:       title,
 					Color:       16449599,
-					URL:         song.Data[0].Attributes.URL,
-					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: song.Data[0].Attributes.Artwork.URL},
-					Description: "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider\n" + "Album: " + song.Data[0].Attributes.AlbumName + "\nRelease: " + song.Data[0].Attributes.ReleaseDate + "\nDuration: " + t,
-					Footer:      &discordgo.MessageEmbedFooter{Text: "Shared by " + message.Author.Username, IconURL: message.Author.AvatarURL("")},
+					URL:         urlEmbed,
+					Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: thumbnail},
+					Description: description,
+					Footer:      &discordgo.MessageEmbedFooter{Text: footer, IconURL: message.Author.AvatarURL("")},
 				}, Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
