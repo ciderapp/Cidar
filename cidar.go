@@ -177,17 +177,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					totalMills += album.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
 				}
 				if totalMills > 0 {
-					seconds := totalMills / 1000
-					ss := seconds % 60
-					mm := (seconds / 60) % 60
-					hh := (seconds / (60 * 60)) % 24
-					if hh == 0 && mm != 0 {
-						t = fmt.Sprintf("%02d:%02d", mm, ss)
-					} else if hh == 0 && mm == 0 {
-						t = fmt.Sprintf("%02d", ss)
-					} else {
-						t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
-					}
+					t = MilliscondsToHHMMSS(totalMills)
 				}
 				title = album.Data[0].Attributes.Name
 				urlEmbed = album.Data[0].Attributes.URL
@@ -210,17 +200,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 					totalMills += playlist.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
 				}
 				if totalMills > 0 {
-					seconds := totalMills / 1000
-					ss := seconds % 60
-					mm := (seconds / 60) % 60
-					hh := (seconds / (60 * 60)) % 24
-					if hh == 0 && mm != 0 {
-						t = fmt.Sprintf("%02d:%02d", mm, ss)
-					} else if hh == 0 && mm == 0 {
-						t = fmt.Sprintf("%02d", ss)
-					} else {
-						t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
-					}
+					t = MilliscondsToHHMMSS(totalMills)
 				}
 				title = playlist.Data[0].Attributes.Name
 				urlEmbed = playlist.Data[0].Attributes.URL
@@ -240,17 +220,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println(err)
 			}
 			if song.Data[0].Attributes.DurationInMillis > 0 {
-				seconds := song.Data[0].Attributes.DurationInMillis / 1000
-				ss := seconds % 60
-				mm := (seconds / 60) % 60
-				hh := (seconds / (60 * 60)) % 24
-				if hh == 0 && mm != 0 {
-					t = fmt.Sprintf("%02d:%02d", mm, ss)
-				} else if hh == 0 && mm == 0 {
-					t = fmt.Sprintf("%02d", ss)
-				} else {
-					t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
-				}
+				t = MilliscondsToHHMMSS(song.Data[0].Attributes.DurationInMillis)
 			}
 			title = song.Data[0].Attributes.Name
 			urlEmbed = song.Data[0].Attributes.URL
