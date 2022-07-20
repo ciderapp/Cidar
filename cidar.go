@@ -17,8 +17,6 @@ import (
 	"syscall"
 )
 
-var discordSession *discordgo.Session
-
 var DeveloperToken string
 
 var urlRegexp *regexp.Regexp
@@ -150,26 +148,10 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		uri, _ := url.ParseRequestURI(messageUrl)
 		values := uri.Query()
 		id := values.Get("i")
-		client := http.Client{}
-		req, err := http.NewRequest("GET", fmt.Sprintf("https://api.music.apple.com/v1/catalog/%s/songs/%s", "us", id), nil)
+
+		body, err := RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
 		if err != nil {
 			log.Println(err)
-		}
-
-		req.Header = http.Header{
-			"Authorization": []string{"Bearer " + DeveloperToken},
-		}
-
-		res, err := client.Do(req)
-		if res.Body == nil {
-			log.Println(err)
-		}
-
-		body, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Println(err)
-		}
-		if res.StatusCode != 200 {
 			return
 		}
 
