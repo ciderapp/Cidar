@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"regexp"
 	"strings"
 	"syscall"
@@ -148,11 +149,20 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		uri, _ := url.ParseRequestURI(messageUrl)
 		values := uri.Query()
 		id := values.Get("i")
-
-		body, err := RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
-		if err != nil {
-			log.Println(err)
-			return
+		var body []byte
+		var err error
+		if len(id) == 0 {
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", "us", path.Base(uri.Path)), nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+		} else {
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
 		}
 
 		var song Song
@@ -174,19 +184,21 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		if len(strings.TrimSpace(strings.ReplaceAll(message.Content, origMessageUrl, ""))) != 0 {
 			content = strings.ReplaceAll(message.Content, origMessageUrl, "(embed)")
 		}
-
 		var t string
-		seconds := song.Data[0].Attributes.DurationInMillis / 1000
-		ss := seconds % 60
-		mm := (seconds / 60) % 60
-		hh := (seconds / (60 * 60)) % 24
-
-		if hh == 0 && mm != 0 {
-			t = fmt.Sprintf("%02d:%02d", mm, ss)
-		} else if hh == 0 && mm == 0 {
-			t = fmt.Sprintf("%02d", ss)
+		if song.Data[0].Attributes.DurationInMillis > 0 {
+			seconds := song.Data[0].Attributes.DurationInMillis / 1000
+			ss := seconds % 60
+			mm := (seconds / 60) % 60
+			hh := (seconds / (60 * 60)) % 24
+			if hh == 0 && mm != 0 {
+				t = fmt.Sprintf("%02d:%02d", mm, ss)
+			} else if hh == 0 && mm == 0 {
+				t = fmt.Sprintf("%02d", ss)
+			} else {
+				t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
+			}
 		} else {
-			t = fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
+			t = "Album"
 		}
 
 		useWebhook, hasUseWebhook := os.LookupEnv("USE_WEBHOOK")
