@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func MilliscondsToHHMMSS(milliseconds int) string {
+func MillisecondsToHHMMSS(milliseconds int) string {
 	seconds := milliseconds / 1000
 	ss := seconds % 60
 	mm := (seconds / 60) % 60

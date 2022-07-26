@@ -180,7 +180,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				totalMills += album.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
 			}
 			if totalMills > 0 {
-				t = MilliscondsToHHMMSS(totalMills)
+				t = MillisecondsToHHMMSS(totalMills)
 			}
 			title = album.Data[0].Attributes.Name
 			urlEmbed = album.Data[0].Attributes.URL
@@ -203,7 +203,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				totalMills += playlist.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
 			}
 			if totalMills > 0 {
-				t = MilliscondsToHHMMSS(totalMills)
+				t = MillisecondsToHHMMSS(totalMills)
 			}
 			title = playlist.Data[0].Attributes.Name
 			urlEmbed = playlist.Data[0].Attributes.URL
@@ -223,7 +223,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println(err)
 			}
 			if song.Data[0].Attributes.DurationInMillis > 0 {
-				t = MilliscondsToHHMMSS(song.Data[0].Attributes.DurationInMillis)
+				t = MillisecondsToHHMMSS(song.Data[0].Attributes.DurationInMillis)
 			}
 			title = song.Data[0].Attributes.Name
 			urlEmbed = song.Data[0].Attributes.URL
@@ -242,7 +242,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println(err)
 			}
 			if video.Data[0].Attributes.DurationInMillis > 0 {
-				t = MilliscondsToHHMMSS(video.Data[0].Attributes.DurationInMillis)
+				t = MillisecondsToHHMMSS(video.Data[0].Attributes.DurationInMillis)
 			}
 			title = video.Data[0].Attributes.Name
 			urlEmbed = video.Data[0].Attributes.URL
