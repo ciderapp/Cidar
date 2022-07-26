@@ -160,12 +160,12 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		var description string
 		var footer string
 
-		lang := strings.ReplaceAll(uri.Path, "https://", "")
-		subPaths := strings.Split(lang, "/")
-		lang = subPaths[1]
+		storefront := strings.ReplaceAll(uri.Path, "https://", "")
+		subPaths := strings.Split(storefront, "/")
+		storefront = subPaths[1]
 
 		if strings.Contains(uri.Path, "album") {
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", lang, path.Base(uri.Path)), nil)
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
 				log.Println(err)
 				return
@@ -188,7 +188,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			description = "Listen to " + album.Data[0].Attributes.Name + " by " + album.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(album.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 		} else if strings.Contains(uri.Path, "playlist") {
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", lang, path.Base(uri.Path)), nil)
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
 				log.Println(err)
 				return
@@ -212,7 +212,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 		} else if strings.Contains(uri.Path, "song") {
 			id := values.Get("i")
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", lang, id), nil)
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", storefront, id), nil)
 			if err != nil {
 				log.Println(err)
 				return
@@ -231,7 +231,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
 		} else if strings.Contains(uri.Path, "music-video") {
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/music-videos/%s", lang, path.Base(uri.Path)), nil)
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/music-videos/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
 				log.Println(err)
 				return
@@ -250,7 +250,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			description = "Listen to " + video.Data[0].Attributes.Name + " by " + video.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + video.Data[0].Attributes.ReleaseDate
 		} else if strings.Contains(uri.Path, "artist") {
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/artists/%s", lang, path.Base(uri.Path)), nil)
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/artists/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
 				log.Println(err)
 				return
