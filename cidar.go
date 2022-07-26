@@ -101,14 +101,34 @@ func main() {
 
 	ctab.RunAll()
 
-	discordSession.AddHandler(test)
+	discordSession.AddHandler(CiderEmbed)
+	discordSession.AddHandler(MonochromishCucker)
 	defer discordSession.Close()
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 }
 
-func test(session *discordgo.Session, message *discordgo.MessageCreate) {
+func MonochromishCucker(session *discordgo.Session, message *discordgo.MessageCreate) {
+	if message.Author.ID == session.State.User.ID || len(message.WebhookID) > 0 {
+		return
+	}
+	if message.Author.ID != "500315184510795819" {
+		return
+	}
+
+	content := strings.ToLower(message.Content)
+
+	if strings.Contains(content, "rest") && strings.Contains(content, "api") {
+		err := session.ChannelMessageDelete(message.ChannelID, message.ID)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+	}
+}
+
+func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 	if message.Author.ID == session.State.User.ID || len(message.WebhookID) > 0 {
 		return
 	}
