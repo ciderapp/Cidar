@@ -184,7 +184,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			}
 			title = album.Data[0].Attributes.Name
 			urlEmbed = album.Data[0].Attributes.URL
-			thumbnail = strings.ReplaceAll(album.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			thumbnail = ThumbnailLink(album.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + album.Data[0].Attributes.Name + " by " + album.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(album.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 		} else if strings.Contains(uri.Path, "playlist") {
@@ -207,7 +207,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			}
 			title = playlist.Data[0].Attributes.Name
 			urlEmbed = playlist.Data[0].Attributes.URL
-			thumbnail = strings.ReplaceAll(playlist.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			thumbnail = ThumbnailLink(playlist.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + playlist.Data[0].Attributes.Name + " by " + playlist.Data[0].Attributes.CuratorName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 		} else if strings.Contains(uri.Path, "song") {
@@ -227,7 +227,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			}
 			title = song.Data[0].Attributes.Name
 			urlEmbed = song.Data[0].Attributes.URL
-			thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			thumbnail = ThumbnailLink(song.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
 		} else if strings.Contains(uri.Path, "music-video") {
@@ -246,7 +246,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			}
 			title = video.Data[0].Attributes.Name
 			urlEmbed = video.Data[0].Attributes.URL
-			thumbnail = strings.ReplaceAll(video.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			thumbnail = ThumbnailLink(video.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + video.Data[0].Attributes.Name + " by " + video.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + video.Data[0].Attributes.ReleaseDate
 		} else if strings.Contains(uri.Path, "artist") {
@@ -262,7 +262,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			}
 			title = artist.Data[0].Attributes.Name
 			urlEmbed = artist.Data[0].Attributes.URL
-			thumbnail = strings.ReplaceAll(artist.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			thumbnail = ThumbnailLink(artist.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + artist.Data[0].Attributes.Name + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator
 		} else {

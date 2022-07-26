@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 func MilliscondsToHHMMSS(milliseconds int) string {
 	seconds := milliseconds / 1000
@@ -14,4 +18,10 @@ func MilliscondsToHHMMSS(milliseconds int) string {
 	} else {
 		return fmt.Sprintf("%d:%02d:%02d", hh, mm, ss)
 	}
+}
+
+func ThumbnailLink(url string, width int, height int) string {
+	url = strings.ReplaceAll(url, "{w}", strconv.Itoa(width))
+	url = strings.ReplaceAll(url, "{h}", strconv.Itoa(height))
+	return url
 }
