@@ -149,7 +149,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		}
 		uri, _ := url.ParseRequestURI(messageUrl)
 		values := uri.Query()
-		id := values.Get("i")
+
 		var body []byte
 		var err error
 		var t string
@@ -160,56 +160,59 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 		var description string
 		var footer string
 
-		if len(id) == 0 {
-			if strings.Contains(uri.Path, "album") {
-				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", "us", path.Base(uri.Path)), nil)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				var album Album
-				err = json.Unmarshal(body, &album)
-				if err != nil {
-					log.Println(err)
-				}
-				var totalMills int
-				for i := 0; i < len(album.Data[0].Relationships.Tracks.Data); i++ {
-					totalMills += album.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
-				}
-				if totalMills > 0 {
-					t = MilliscondsToHHMMSS(totalMills)
-				}
-				title = album.Data[0].Attributes.Name
-				urlEmbed = album.Data[0].Attributes.URL
-				thumbnail = strings.ReplaceAll(album.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
-				description = "Listen to " + album.Data[0].Attributes.Name + " by " + album.Data[0].Attributes.ArtistName + " on Cider"
-				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(album.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
-			} else if strings.Contains(uri.Path, "playlist") {
-				body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", "us", path.Base(uri.Path)), nil)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-				var playlist Playlist
-				err = json.Unmarshal(body, &playlist)
-				if err != nil {
-					log.Println(err)
-				}
-				var totalMills int
-				for i := 0; i < len(playlist.Data[0].Relationships.Tracks.Data); i++ {
-					totalMills += playlist.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
-				}
-				if totalMills > 0 {
-					t = MilliscondsToHHMMSS(totalMills)
-				}
-				title = playlist.Data[0].Attributes.Name
-				urlEmbed = playlist.Data[0].Attributes.URL
-				thumbnail = strings.ReplaceAll(playlist.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
-				description = "Listen to " + playlist.Data[0].Attributes.Name + " by " + playlist.Data[0].Attributes.CuratorName + " on Cider"
-				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
+		lang := strings.ReplaceAll(uri.Path, "https://", "")
+		subPaths := strings.Split(lang, "/")
+		lang = subPaths[1]
+
+		if strings.Contains(uri.Path, "album") {
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", lang, path.Base(uri.Path)), nil)
+			if err != nil {
+				log.Println(err)
+				return
 			}
+			var album Album
+			err = json.Unmarshal(body, &album)
+			if err != nil {
+				log.Println(err)
+			}
+			var totalMills int
+			for i := 0; i < len(album.Data[0].Relationships.Tracks.Data); i++ {
+				totalMills += album.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
+			}
+			if totalMills > 0 {
+				t = MilliscondsToHHMMSS(totalMills)
+			}
+			title = album.Data[0].Attributes.Name
+			urlEmbed = album.Data[0].Attributes.URL
+			thumbnail = strings.ReplaceAll(album.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			description = "Listen to " + album.Data[0].Attributes.Name + " by " + album.Data[0].Attributes.ArtistName + " on Cider"
+			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(album.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
+		} else if strings.Contains(uri.Path, "playlist") {
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", lang, path.Base(uri.Path)), nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			var playlist Playlist
+			err = json.Unmarshal(body, &playlist)
+			if err != nil {
+				log.Println(err)
+			}
+			var totalMills int
+			for i := 0; i < len(playlist.Data[0].Relationships.Tracks.Data); i++ {
+				totalMills += playlist.Data[0].Relationships.Tracks.Data[i].Attributes.DurationInMillis
+			}
+			if totalMills > 0 {
+				t = MilliscondsToHHMMSS(totalMills)
+			}
+			title = playlist.Data[0].Attributes.Name
+			urlEmbed = playlist.Data[0].Attributes.URL
+			thumbnail = strings.ReplaceAll(playlist.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			description = "Listen to " + playlist.Data[0].Attributes.Name + " by " + playlist.Data[0].Attributes.CuratorName + " on Cider"
+			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 		} else if strings.Contains(uri.Path, "song") {
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
+			id := values.Get("i")
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", lang, id), nil)
 			if err != nil {
 				log.Println(err)
 				return
@@ -227,6 +230,41 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
 			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
+		} else if strings.Contains(uri.Path, "music-video") {
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/music-videos/%s", lang, path.Base(uri.Path)), nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			var video Video
+			err = json.Unmarshal(body, &video)
+			if err != nil {
+				log.Println(err)
+			}
+			if video.Data[0].Attributes.DurationInMillis > 0 {
+				t = MilliscondsToHHMMSS(video.Data[0].Attributes.DurationInMillis)
+			}
+			title = video.Data[0].Attributes.Name
+			urlEmbed = video.Data[0].Attributes.URL
+			thumbnail = strings.ReplaceAll(video.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			description = "Listen to " + video.Data[0].Attributes.Name + " by " + video.Data[0].Attributes.ArtistName + " on Cider"
+			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + video.Data[0].Attributes.ReleaseDate
+		} else if strings.Contains(uri.Path, "artist") {
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/artists/%s", lang, path.Base(uri.Path)), nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			var artist Artist
+			err = json.Unmarshal(body, &artist)
+			if err != nil {
+				log.Println(err)
+			}
+			title = artist.Data[0].Attributes.Name
+			urlEmbed = artist.Data[0].Attributes.URL
+			thumbnail = strings.ReplaceAll(artist.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
+			description = "Listen to " + artist.Data[0].Attributes.Name + " on Cider"
+			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator
 		} else {
 			_, _ = session.ChannelMessageSendReply(message.ChannelID, "Apple music link type is not implemented", message.Reference())
 			return

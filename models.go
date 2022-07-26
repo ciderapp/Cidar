@@ -356,3 +356,98 @@ type Link struct {
 		} `json:"itunes"`
 	} `json:"linksByPlatform"`
 }
+
+type Video struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		Href       string `json:"href"`
+		Attributes struct {
+			Previews []struct {
+				URL     string `json:"url"`
+				HlsURL  string `json:"hlsUrl"`
+				Artwork struct {
+					Width      int    `json:"width"`
+					Height     int    `json:"height"`
+					URL        string `json:"url"`
+					BgColor    string `json:"bgColor"`
+					TextColor1 string `json:"textColor1"`
+					TextColor2 string `json:"textColor2"`
+					TextColor3 string `json:"textColor3"`
+					TextColor4 string `json:"textColor4"`
+				} `json:"artwork"`
+			} `json:"previews"`
+			Artwork struct {
+				Width      int    `json:"width"`
+				Height     int    `json:"height"`
+				URL        string `json:"url"`
+				BgColor    string `json:"bgColor"`
+				TextColor1 string `json:"textColor1"`
+				TextColor2 string `json:"textColor2"`
+				TextColor3 string `json:"textColor3"`
+				TextColor4 string `json:"textColor4"`
+			} `json:"artwork"`
+			ArtistName       string   `json:"artistName"`
+			URL              string   `json:"url"`
+			GenreNames       []string `json:"genreNames"`
+			Has4K            bool     `json:"has4K"`
+			DurationInMillis int      `json:"durationInMillis"`
+			ReleaseDate      string   `json:"releaseDate"`
+			Name             string   `json:"name"`
+			Isrc             string   `json:"isrc"`
+			PlayParams       struct {
+				ID   string `json:"id"`
+				Kind string `json:"kind"`
+			} `json:"playParams"`
+			HasHDR bool `json:"hasHDR"`
+		} `json:"attributes"`
+		Relationships struct {
+			Albums struct {
+				Href string        `json:"href"`
+				Data []interface{} `json:"data"`
+			} `json:"albums"`
+			Artists struct {
+				Href string `json:"href"`
+				Data []struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+					Href string `json:"href"`
+				} `json:"data"`
+			} `json:"artists"`
+		} `json:"relationships"`
+	} `json:"data"`
+}
+
+type Artist struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		Href       string `json:"href"`
+		Attributes struct {
+			GenreNames []string `json:"genreNames"`
+			Name       string   `json:"name"`
+			URL        string   `json:"url"`
+			Artwork    struct {
+				Width      int    `json:"width"`
+				Height     int    `json:"height"`
+				URL        string `json:"url"`
+				BgColor    string `json:"bgColor"`
+				TextColor1 string `json:"textColor1"`
+				TextColor2 string `json:"textColor2"`
+				TextColor3 string `json:"textColor3"`
+				TextColor4 string `json:"textColor4"`
+			} `json:"artwork"`
+		} `json:"attributes"`
+		Relationships struct {
+			Albums struct {
+				Href string `json:"href"`
+				Next string `json:"next"`
+				Data []struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+					Href string `json:"href"`
+				} `json:"data"`
+			} `json:"albums"`
+		} `json:"relationships"`
+	} `json:"data"`
+}
