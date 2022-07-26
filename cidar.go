@@ -109,7 +109,7 @@ func main() {
 }
 
 func test(session *discordgo.Session, message *discordgo.MessageCreate) {
-	if message.Author.ID == session.State.User.ID {
+	if message.Author.ID == session.State.User.ID || len(message.WebhookID) > 0 {
 		return
 	}
 
@@ -208,7 +208,7 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 				description = "Listen to " + playlist.Data[0].Attributes.Name + " by " + playlist.Data[0].Attributes.CuratorName + " on Cider"
 				footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
 			}
-		} else {
+		} else if strings.Contains(uri.Path, "song") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", "us", id), nil)
 			if err != nil {
 				log.Println(err)
@@ -227,9 +227,15 @@ func test(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = strings.ReplaceAll(song.Data[0].Attributes.Artwork.URL, "{w}x{h}", "512x512")
 			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
+		} else {
+			_, _ = session.ChannelMessageSendReply(message.ChannelID, "Apple music link type is not implemented", message.Reference())
+			return
 		}
 
 		modLink := strings.ReplaceAll(urlEmbed, "https://", "")
+		if len(modLink) == 0 {
+			return
+		}
 		playLink := "https://cider.sh/p?" + modLink
 		viewLink := "https://cider.sh/o?" + modLink
 
