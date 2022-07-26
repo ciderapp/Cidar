@@ -125,13 +125,16 @@ func MonochromishCucker(session *discordgo.Session, message *discordgo.MessageCr
 			log.Println(err)
 			return
 		}
+		resp, err := http.Get("https://cdn.discordapp.com/attachments/995118775852605501/1001300325795385496/yStHlfeya2hijvTO.mp4")
+		if resp.StatusCode != 200 {
+			return
+		}
+
 		_, err = session.ChannelMessageSendComplex(
 			message.ChannelID,
-			&discordgo.MessageSend{Embed: &discordgo.MessageEmbed{
-				Title: "Fuck off",
-				Color: 16449599,
-				Video: &discordgo.MessageEmbedVideo{URL: "https://cdn.discordapp.com/attachments/995118775852605501/1001300325795385496/yStHlfeya2hijvTO.mp4"},
-			}},
+			&discordgo.MessageSend{
+				File: &discordgo.File{Reader: resp.Body, Name: "FuckOff.mp4"},
+			},
 		)
 		if err != nil {
 			log.Println(err)
