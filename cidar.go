@@ -6,7 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 	"github.com/mileusna/crontab"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -86,7 +86,7 @@ func main() {
 			log.Println(err)
 		}
 
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			log.Println(err)
 		}
@@ -103,7 +103,12 @@ func main() {
 
 	discordSession.AddHandler(CiderEmbed)
 	discordSession.AddHandler(MonochromishCucker)
-	defer discordSession.Close()
+	defer func(discordSession *discordgo.Session) {
+		err := discordSession.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(discordSession)
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
@@ -164,8 +169,13 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 				log.Println("non 200", req.Status)
 				return
 			}
-			defer req.Body.Close()
-			b, err := ioutil.ReadAll(req.Body)
+			defer func(Body io.ReadCloser) {
+				err := Body.Close()
+				if err != nil {
+					log.Println(err)
+				}
+			}(req.Body)
+			b, err := io.ReadAll(req.Body)
 			if err != nil {
 				log.Println(err)
 				return
