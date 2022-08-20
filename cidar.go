@@ -208,8 +208,27 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 		storefront := strings.ReplaceAll(uri.Path, "https://", "")
 		subPaths := strings.Split(storefront, "/")
 		storefront = subPaths[1]
-
-		if strings.Contains(uri.Path, "album") {
+		if strings.Contains(uri.Path, "song") || strings.Contains(uri.Path, "?i=") {
+			id := values.Get("i")
+			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", storefront, id), nil)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			var song Song
+			err = json.Unmarshal(body, &song)
+			if err != nil {
+				log.Println(err)
+			}
+			if song.Data[0].Attributes.DurationInMillis > 0 {
+				t = MillisecondsToHHMMSS(song.Data[0].Attributes.DurationInMillis)
+			}
+			title = song.Data[0].Attributes.Name
+			urlEmbed = song.Data[0].Attributes.URL
+			thumbnail = ThumbnailLink(song.Data[0].Attributes.Artwork.URL, 512, 512)
+			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
+			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
+		} else if strings.Contains(uri.Path, "album") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
 				log.Println(err)
@@ -255,26 +274,6 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = ThumbnailLink(playlist.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + playlist.Data[0].Attributes.Name + " by " + playlist.Data[0].Attributes.CuratorName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
-		} else if strings.Contains(uri.Path, "song") {
-			id := values.Get("i")
-			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/songs/%s", storefront, id), nil)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			var song Song
-			err = json.Unmarshal(body, &song)
-			if err != nil {
-				log.Println(err)
-			}
-			if song.Data[0].Attributes.DurationInMillis > 0 {
-				t = MillisecondsToHHMMSS(song.Data[0].Attributes.DurationInMillis)
-			}
-			title = song.Data[0].Attributes.Name
-			urlEmbed = song.Data[0].Attributes.URL
-			thumbnail = ThumbnailLink(song.Data[0].Attributes.Artwork.URL, 512, 512)
-			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
-			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
 		} else if strings.Contains(uri.Path, "music-video") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/music-videos/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
