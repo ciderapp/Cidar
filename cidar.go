@@ -228,6 +228,7 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = ThumbnailLink(song.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + song.Data[0].Attributes.AlbumName + " by " + song.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + song.Data[0].Attributes.ReleaseDate
+			goto SKIP
 		} else if strings.Contains(uri.Path, "album") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/albums/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
@@ -251,6 +252,7 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = ThumbnailLink(album.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + album.Data[0].Attributes.Name + " by " + album.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(album.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
+			goto SKIP
 		} else if strings.Contains(uri.Path, "playlist") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/playlists/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
@@ -274,6 +276,7 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = ThumbnailLink(playlist.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + playlist.Data[0].Attributes.Name + " by " + playlist.Data[0].Attributes.CuratorName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | Songs: " + strconv.Itoa(len(playlist.Data[0].Relationships.Tracks.Data)) + " • Duration: " + t
+			goto SKIP
 		} else if strings.Contains(uri.Path, "music-video") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/music-videos/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
@@ -293,6 +296,7 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 			thumbnail = ThumbnailLink(video.Data[0].Attributes.Artwork.URL, 512, 512)
 			description = "Listen to " + video.Data[0].Attributes.Name + " by " + video.Data[0].Attributes.ArtistName + " on Cider"
 			footer = "Shared by " + message.Author.Username + "#" + message.Author.Discriminator + " | " + t + " • " + video.Data[0].Attributes.ReleaseDate
+			goto SKIP
 		} else if strings.Contains(uri.Path, "artist") {
 			body, err = RequestEndpoint("GET", fmt.Sprintf("v1/catalog/%s/artists/%s", storefront, path.Base(uri.Path)), nil)
 			if err != nil {
@@ -313,6 +317,8 @@ func CiderEmbed(session *discordgo.Session, message *discordgo.MessageCreate) {
 			_, _ = session.ChannelMessageSendReply(message.ChannelID, "Apple music link type is not implemented", message.Reference())
 			return
 		}
+
+	SKIP:
 
 		modLink := strings.ReplaceAll(urlEmbed, "https://", "")
 		if len(modLink) == 0 {
