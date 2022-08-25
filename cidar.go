@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -20,25 +21,45 @@ import (
 )
 
 var DeveloperToken string
+var ApiKey string
+var ApiSecret string
+var BearerToken string
 
 var urlRegexp *regexp.Regexp
 var appleRegexp *regexp.Regexp
 var spotifyRegexp *regexp.Regexp
 
-func main() {
-	log.SetPrefix("[Cidar] ")
+var debug *bool
 
-	log.Println("Starting discord bot")
-	_, hasToken := os.LookupEnv("TOKEN")
-	_, hasWebhookID := os.LookupEnv("WEBHOOK_ID")
-	if !hasToken || !hasWebhookID {
-		err := godotenv.Load()
-		if err != nil {
-			log.Println("Could not load dotenv file")
-			return
-		}
+func init() {
+	log.SetPrefix("[Cidar] ")
+	debug = flag.Bool("debug", false, "Enables debugging")
+	flag.Parse()
+	if debug != nil && *debug {
+		log.SetFlags(log.Flags() | log.Lshortfile)
 	}
-	discordSession, err := discordgo.New(fmt.Sprintf("Bot %s", os.Getenv("TOKEN")))
+}
+
+func main() {
+	log.Println("Starting discord bot")
+
+	err := godotenv.Load()
+	if *debug {
+		log.Println("Loading dotenv")
+	}
+	if err != nil {
+		log.Println("Dotenv not found")
+	}
+
+	token := os.Getenv("TOKEN")
+	ApiKey = os.Getenv("API_KEY")
+	ApiSecret = os.Getenv("API_SECRET")
+	BearerToken = os.Getenv("BEARER_TOKEN")
+	if *debug {
+		log.Println("Token: ", token)
+	}
+
+	discordSession, err := discordgo.New(fmt.Sprintf("Bot %s", token))
 	if err != nil {
 		log.Println(fmt.Sprintf("err:%s", err.Error()))
 	}
@@ -52,7 +73,7 @@ func main() {
 	}
 	discordSession.Identify.Intents = discordgo.IntentGuildMessages
 
-	// Setup regex early so we dont compile each message
+	// Setup regex early so we don't compile each message
 	urlRegexp, err = regexp.Compile("(?:(?:https?|ftp)://)?[\\w/\\-?=%.]+\\.[\\w/\\-&?=%.]+")
 	if err != nil {
 		log.Fatalln("Failed to compile url regex")
