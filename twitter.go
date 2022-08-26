@@ -2,35 +2,56 @@ package main
 
 import (
 	"context"
-	"github.com/michimani/gotwi"
-	"github.com/michimani/gotwi/tweet/managetweet"
-	"github.com/michimani/gotwi/tweet/managetweet/types"
+	"encoding/json"
+	"fmt"
+	"github.com/dghubble/oauth1"
+	"github.com/g8rswimmer/go-twitter/v2"
 	"log"
+	"net/http"
+	"os"
+	"runtime"
 )
 
-var TwitterClient *gotwi.Client
+var TwitterClient *twitter.Client
+
+type authorize struct {
+}
+
+func (a authorize) Add(req *http.Request) {
+}
 
 func init() {
-	var err error
-	ClientInput := &gotwi.NewClientInput{
-		AuthenticationMethod: gotwi.AuthenMethodOAuth1UserContext,
-		OAuthToken:           ApiKey,
-		OAuthTokenSecret:     ApiSecret,
+	ApiKey = os.Getenv("API_KEY")
+	ApiSecret = os.Getenv("API_SECRET")
+	BearerToken = os.Getenv("BEARER_TOKEN")
+	AccessToken = os.Getenv("ACCESS_TOKEN")
+	AccessSecret = os.Getenv("ACCESS_SECRET")
+
+	config := oauth1.NewConfig(ApiKey, ApiSecret)
+	httpClient := config.Client(oauth1.NoContext, &oauth1.Token{
+		Token:       AccessToken,
+		TokenSecret: ApiSecret,
+	})
+
+	TwitterClient := &twitter.Client{
+		Authorizer: &authorize{},
+		Client:     httpClient,
+		Host:       "https://api.twitter.com",
 	}
 
-	TwitterClient, err = gotwi.NewClient(ClientInput)
+	req := twitter.CreateTweetRequest{
+		Text: "This is a test tweet from the Discord Cidar bot: " + runtime.Version(),
+	}
+	fmt.Println("Callout to create tweet callout")
+
+	tweetResponse, err := TwitterClient.CreateTweet(context.Background(), req)
 	if err != nil {
-		log.Println(err)
-		return
+		log.Panicf("create tweet error: %v", err)
 	}
 
-	Input := &types.CreateInput{
-		Text: gotwi.String("Test tweet from the Cidar discord bot"),
-	}
-
-	_, err = managetweet.Create(context.Background(), TwitterClient, Input)
+	enc, err := json.MarshalIndent(tweetResponse, "", "    ")
 	if err != nil {
-		log.Println(err.Error())
-		return
+		log.Panic(err)
 	}
+	fmt.Println(string(enc))
 }

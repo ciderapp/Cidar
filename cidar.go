@@ -24,6 +24,8 @@ var DeveloperToken string
 var ApiKey string
 var ApiSecret string
 var BearerToken string
+var AccessToken string
+var AccessSecret string
 
 var urlRegexp *regexp.Regexp
 var appleRegexp *regexp.Regexp
@@ -38,11 +40,6 @@ func init() {
 	if debug != nil && *debug {
 		log.SetFlags(log.Flags() | log.Lshortfile)
 	}
-}
-
-func main() {
-	log.Println("Starting discord bot")
-
 	err := godotenv.Load()
 	if *debug {
 		log.Println("Loading dotenv")
@@ -50,12 +47,14 @@ func main() {
 	if err != nil {
 		log.Println("Dotenv not found")
 	}
+}
+
+func main() {
+	log.Println("Starting discord bot")
 
 	token := os.Getenv("TOKEN")
-	ApiKey = os.Getenv("API_KEY")
-	ApiSecret = os.Getenv("API_SECRET")
-	BearerToken = os.Getenv("BEARER_TOKEN")
 	if *debug {
+		log.Println("Twitter Token: ", BearerToken)
 		log.Println("Token: ", token)
 	}
 
