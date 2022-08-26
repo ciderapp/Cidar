@@ -53,11 +53,6 @@ func main() {
 	log.Println("Starting discord bot")
 
 	token := os.Getenv("TOKEN")
-	if *debug {
-		log.Println("Twitter Token: ", BearerToken)
-		log.Println("Token: ", token)
-	}
-
 	discordSession, err := discordgo.New(fmt.Sprintf("Bot %s", token))
 	if err != nil {
 		log.Println(fmt.Sprintf("err:%s", err.Error()))
