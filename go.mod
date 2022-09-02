@@ -13,6 +13,6 @@ require (
 
 require (
 	github.com/gorilla/websocket v1.5.0 // indirect
-	golang.org/x/crypto v0.0.0-20220824171710-5757bc0c5503 // indirect
-	golang.org/x/sys v0.0.0-20220823224334-20c2bfdbfe24 // indirect
+	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8 // indirect
+	golang.org/x/sys v0.0.0-20220818161305-2296e01440c6 // indirect
 )

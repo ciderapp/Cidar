@@ -18,7 +18,14 @@ func RequestEndpoint(method string, endpoint string, body io.Reader) ([]byte, er
 	}
 
 	req.Header = http.Header{
-		"Authorization": []string{"Bearer " + DeveloperToken},
+		"Authorization":  []string{"Bearer " + DeveloperToken},
+		"DNT":            []string{"1"},
+		"authority":      []string{"amp-api.music.apple.com"},
+		"origin":         []string{"https://beta.music.apple.com"},
+		"referer":        []string{"https://beta.music.apple.com"},
+		"sec-fetch-dest": []string{"empty"},
+		"sec-fetch-mode": []string{"cors"},
+		"sec-fetch-site": []string{"same-site"},
 	}
 
 	res, err := client.Do(req)
