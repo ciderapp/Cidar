@@ -27,16 +27,16 @@ func init() {
 	AccessSecret = os.Getenv("ACCESS_SECRET")
 
 	if *debug {
-		log.Println(ApiKey)
-		log.Println(ApiSecret)
-		log.Println(AccessToken)
-		log.Println(AccessSecret)
+		log.Println("API_KEY", ApiKey)
+		log.Println("API_SECRET", ApiSecret)
+		log.Println("ACCESS_TOKEN", AccessToken)
+		log.Println("ACCESS_SECRET", AccessSecret)
 	}
 
-	config := oauth1.NewConfig(AccessToken, AccessSecret)
+	config := oauth1.NewConfig(ApiKey, ApiSecret)
 	httpClient := config.Client(oauth1.NoContext, &oauth1.Token{
-		Token:       ApiKey,
-		TokenSecret: ApiSecret,
+		Token:       AccessToken,
+		TokenSecret: AccessSecret,
 	})
 
 	TwitterClient = &twitter.Client{
