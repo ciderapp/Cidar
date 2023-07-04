@@ -1,8 +1,10 @@
 FROM rust:1.70 AS build
-WORKDIR /rust/src/cidar
+WORKDIR /usr/src/myapp
 COPY . .
 RUN cargo install --path .
 
-FROM alpine:latest
-COPY --from=builder /usr/local/cargo/bin/cidar /usr/local/bin/cidar
+FROM debian:bullseye-slim
+RUN rm -rf /var/lib/apt/lists/*
+COPY --from=build /usr/local/cargo/bin/cidar /usr/local/bin/cidar
+
 CMD ["cidar"]
