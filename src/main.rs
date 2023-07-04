@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::task::Context;
 use std::time::Duration;
 
 use reqwest::{Url, Method};
@@ -9,17 +8,13 @@ use serde_json::Value;
 use serenity::async_trait;
 use serenity::framework::StandardFramework;
 use serenity::model::Timestamp;
-use serenity::model::application::command::Command;
-use serenity::model::application::interaction::{Interaction, InteractionResponseType};
 use serenity::model::gateway::Ready;
-use serenity::model::id::GuildId;
-use serenity::model::prelude::Message;
+use serenity::model::application::component::ButtonStyle;
+use serenity::model::prelude::{Message, Embed};
 use serenity::prelude::*;
-use serenity::model::webhook::Webhook;
 
 use regex::Regex;
 
-use serde_json::json;
 
 type TokenLock = Arc<RwLock<Option<String>>>;
 
@@ -89,6 +84,33 @@ impl ValuePath for Value {
     }
 }
 
+trait Time {
+    fn milli_to_hhmmss(&self) -> String;
+}
+
+impl Time for u64 {
+    fn milli_to_hhmmss(&self) -> String {
+        let seconds = self / 100;
+        let ss = seconds % 60;
+        let mm = (seconds / 60) % 60;
+        let hh = (seconds / (60 * 60)) % 24;
+
+        if hh == 0 && mm != 0 {
+            format!("{:02}:{:02}", mm, ss)
+        } else if hh == 0 && mm == 0 {
+            format!("{:02}", ss)
+        } else {
+            format!("{}:{:02}:{:02}", hh, mm, ss)
+        }
+    }
+}
+
+impl Time for Duration {
+    fn milli_to_hhmmss(&self) -> String {
+        (self.as_millis() as u64).milli_to_hhmmss()
+    }
+}
+
 fn wh(url: &str, w: u32, h: u32) -> String {
     url.replace("{w}", &format!("{}", w)).replace("{h}", &format!("{}", h))
 }
@@ -100,18 +122,16 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, _ctx: serenity::prelude::Context, _new_message: Message) {
-        if _new_message.channel_id.0 != 1125513784384036874 {
-            return;
-        }
+        // if _new_message.channel_id.0 != 1125513784384036874 {
+        //     return;
+        // }
 
-        // dont do the bot pls
-
+        // dont do the bot pls, deleting these next 3 lines of code will cause the entire bot to implode
         if _new_message.author.bot {
             return;
         }
 
         if self.url_regex.is_match(&_new_message.content) {
-            println!("is url");
             let mut url = match self.url_regex.find(&_new_message.content) {
                 Some(url) => url.as_str().to_string(),
                 None => return,
@@ -119,7 +139,6 @@ impl EventHandler for Handler {
 
             let orig_url = url.clone();
 
-            println!("url: {}", url);
 
             // Check to see it it matches either one of our regular expressions
             if !self.apple_regex.is_match(&url) && !self.spotify_regex.is_match(&url) {
@@ -134,7 +153,6 @@ impl EventHandler for Handler {
                 .json()
                 .await
                 .unwrap();
-                println!("resp: {}", response);
 
                 let amurl = match response.get_value_by_path("linksByPlatform.appleMusic.url") {
                     Some(url) => url,
@@ -146,7 +164,6 @@ impl EventHandler for Handler {
                     None => return,
                 };
 
-                println!("amurl: {:?}", url);
             }
 
             let parsed_url = match Url::parse(&url) {
@@ -199,8 +216,6 @@ impl EventHandler for Handler {
                     total_duration += resp.get_value_by_path(&format!("data.0.relationships.tracks.data.{i}.attributes.durationInMillis")).unwrap().as_u64().unwrap();
                 }
 
-                println!("duration: {}", total_duration);
-
                 description = format!("Listen to {} by {} on Cider", resp.get_value_by_path("data.0.attributes.name").unwrap().as_str().unwrap(), resp.get_value_by_path("data.0.attributes.artistName").unwrap().as_str().unwrap());
                 duration = Duration::from_millis(total_duration);
             } else if url.contains("playlist") {
@@ -222,22 +237,71 @@ impl EventHandler for Handler {
                 resp = self.api.request_endpoint(Method::GET, &format!("v1/catalog/{}/artists/{}", storefront, parsed_url.path_segments().unwrap().last().unwrap())).await;
                 description = format!("Listen to {} on Cider", resp.get_value_by_path("data.0.attributes.name").unwrap().as_str().unwrap());
             }
-            // let wh = _new_message.channel_id.create_webhook(http, "temporary-cidar").await.unwrap();
-            // wh.edit_message(http, message_id, f)
-            //_new_message.channel_id.say(&_ctx.http, &format!("converted to apple id<testing>: {}", id)).await;
 
-            _new_message.channel_id.send_message(&_ctx.http, |m| {
-                m.content(content).add_embed(|e| {
-                    e.title(resp.get_value_by_path("data.0.attributes.name").unwrap().as_str().unwrap_or("N/A"))
+            // So if we create an embed each time, it takes 3 entire seconds per the call of the next three lines
+            // , we need something better, like creating a wenbook the first time, then re-using.
+            // let mut webhook = _new_message.channel_id.create_webhook(&_ctx.http, "temp-cidar").await.unwrap();
+            // webhook.edit_avatar(&_ctx.http, &*_new_message.author.avatar_url().unwrap()).await.unwrap();
+            // webhook.edit_name(&_ctx.http, &_new_message.author.name).await.unwrap();
+
+            // Speed up from 4 seconds to just 0.70 ish
+            let mut webhook = match _new_message.channel_id.webhooks(&_ctx.http).await {
+                Ok(hooks) => {
+                    let mut iterator = hooks.iter();
+                    // tomfoolery
+                    if let Some(webhook) = iterator.find(|&hook| {
+                        //println!("bot: {}, http: {}", &hook.user.as_ref().unwrap().id.0, &_ctx.cache.current_user().id.0);
+                        &hook.user.as_ref().unwrap().id.0 == &_ctx.cache.current_user().id.0
+                    }) {
+                        webhook.clone()
+                    } else {
+                        _new_message.channel_id.create_webhook(&_ctx.http, "cidar-webhook").await.unwrap()
+                    }
+                },
+                Err(_) => {
+                    // We actually dont have any webhooks in the channel, so add cidars one.
+                    _new_message.channel_id.create_webhook(&_ctx.http, "cidar-webhook").await.unwrap()
+                }
+            };
+
+            webhook.edit_avatar(&_ctx.http, &*_new_message.author.avatar_url().unwrap()).await.unwrap();
+            webhook.edit_name(&_ctx.http, &_new_message.author.name).await.unwrap();
+
+            let modded = url.replace("https://", "");
+
+            let play_link = format!("https://cider.sh/p?{}", modded);
+            let view_link = format!("https://cider.sh/o?{}", modded);
+
+            let embed = Embed::fake(|e| {
+                e.title(resp.get_value_by_path("data.0.attributes.name").unwrap().as_str().unwrap_or("N/A"))
                     .url(resp.get_value_by_path("data.0.attributes.url").unwrap().as_str().unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
                     .thumbnail(wh(resp.get_value_by_path("data.0.attributes.artwork.url").unwrap().as_str().unwrap(), 512, 512))
                     .description(&description)
                     .footer(|f| {
-                        f.text(format!("Shared by {} | {:?} • {}", _new_message.author.name, duration, resp.get_value_by_path("data.0.attributes.releaseDate").unwrap_or(json!(""))).as_str())
+                        f.text(format!("Shared by {} | {} • {}", _new_message.author.name, duration.milli_to_hhmmss(), resp.get_value_by_path("data.0.attributes.releaseDate").unwrap_or(Value::String("".to_string())).as_str().unwrap()))
                     })
                     .timestamp(Timestamp::now())
+            });
+
+            webhook.execute(&_ctx.http, false, |m| {
+                m.content(content).embeds(vec![embed.clone()]).components(|c| {
+                    c.create_action_row(|r| {
+                        r.create_button(|b| {
+                            b.label("Play in Cider")
+                            .style(ButtonStyle::Link)
+                            .url(play_link)
+                        })
+                        .create_button(|b| {
+                            b.label("View in Cider")
+                            .style(ButtonStyle::Link)
+                            .url(view_link)
+                        })
+                    })
                 })
             }).await.unwrap();
+
+            webhook.edit_name(&_ctx.http, "cidar-webhook").await.unwrap();
+            webhook.delete_avatar(&_ctx.http).await.unwrap();
 
             match _new_message.delete(&_ctx.http).await {
                 Ok(_) => (),
