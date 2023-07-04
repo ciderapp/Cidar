@@ -117,7 +117,7 @@ fn wh(url: &str, w: u32, h: u32) -> String {
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, ctx: serenity::prelude::Context, ready: Ready) {
+    async fn ready(&self, _ctx: serenity::prelude::Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
     }
 
@@ -366,7 +366,7 @@ async fn token_updater(token: TokenLock) {
             .await
             .unwrap();
 
-        println!("dev_token: {}", response.token);
+
         *token.write().await = Some(response.token);
 
         tokio::time::sleep(Duration::from_secs(60 * 30)).await; // Sleep for 30 minutes 
