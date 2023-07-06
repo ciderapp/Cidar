@@ -9,7 +9,7 @@ use serenity::{
     builder::CreateApplicationCommand, model::prelude::application_command::CommandDataOptionValue,
 };
 
-use crate::{AppleMusicApi, ValuePath};
+use crate::{AppleMusicApi, ValuePath, increment_conversion};
 
 #[derive(Debug)]
 struct ConvertError {
@@ -62,7 +62,10 @@ pub async fn run(
 
         Ok(
             match response.get_value_by_path("linksByPlatform.appleMusic.url") {
-                Some(url) => url.as_str().unwrap().to_string(),
+                Some(url) => {
+                    increment_conversion().await;
+                    url.as_str().unwrap().to_string()
+                },
                 None => {
                     return Err(Box::new(ConvertError::new(
                         "Unable to convert to apple music link",

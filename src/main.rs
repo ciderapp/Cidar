@@ -134,6 +134,27 @@ fn wh(url: &str, w: u32, h: u32) -> String {
         .replace("{h}", &format!("{}", h))
 }
 
+pub async fn increment_conversion() {
+    let mut read_store: Store = match DB.select(("stats", "conversions")).await {
+        Ok(s) => s,
+        Err(_) => {
+            let s: Store = DB
+                .create(("stats", "conversions"))
+                .content(Store::default())
+                .await
+                .unwrap();
+            s
+        }
+    };
+    read_store.total_conversions += 1;
+
+    let _: Store = DB
+        .update(("stats", "conversions"))
+        .content(read_store)
+        .await
+        .unwrap();
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: serenity::prelude::Context, ready: Ready) {
@@ -154,6 +175,13 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
+
+           let _ = command.create_interaction_response(&ctx.http, |response| {
+                response
+                    .kind(InteractionResponseType::ChannelMessageWithSource)
+                    .interaction_response_data(|message| message.content("processing..."))
+                }).await.unwrap();
+
             let content = match command.data.name.as_str() {
                 "about" => commands::about::run(&command.data.options),
                 "convert" => {
@@ -168,10 +196,8 @@ impl EventHandler for Handler {
             };
 
             if let Err(why) = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| message.content(content))
+                .create_followup_message(&ctx.http, |response| {
+                    response.content(content)
                 })
                 .await
             {
@@ -600,24 +626,7 @@ impl EventHandler for Handler {
             _new_message.suppress_embeds(&_ctx.http).await.unwrap();
 
             // Update the conversions
-            let mut read_store: Store = match DB.select(("stats", "conversions")).await {
-                Ok(s) => s,
-                Err(_) => {
-                    let s: Store = DB
-                        .create(("stats", "conversions"))
-                        .content(Store::default())
-                        .await
-                        .unwrap();
-                    s
-                }
-            };
-            read_store.total_conversions += 1;
-
-            let _: Store = DB
-                .update(("stats", "conversions"))
-                .content(read_store)
-                .await
-                .unwrap();
+            increment_conversion().await;
 
             // Update user information
             let user = User {
