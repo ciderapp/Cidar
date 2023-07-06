@@ -2,6 +2,8 @@
 name = "cidar"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+authors = ["freehelpdesk <freehelpdesk@proton.me>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,6 +12,9 @@ strip = true
 lto = true
 opt-level = "z"
 
+
+[build-dependencies]
+vergen = { version = "8.2.4", features = ["build", "cargo", "git", "gitcl", "rustc", "si"] }
 
 [dependencies]
 regex = "1.8.4"
@@ -20,3 +25,4 @@ serenity = { version = "0.11.6", features = ["reqwest"] }
 surrealdb = { version = "1.0.0-beta.9" }
 time-graph = { version = "0.3.0", features = ["table", "json"] }
 tokio = { version = "1.29.1", features = ["full"] }
+vergen = { version = "8.2.4", features = ["build", "cargo", "git", "gitcl", "rustc", "si"] }

@@ -9,7 +9,8 @@ use serenity::async_trait;
 use serenity::framework::StandardFramework;
 use serenity::model::application::component::ButtonStyle;
 use serenity::model::gateway::Ready;
-use serenity::model::prelude::Message;
+use serenity::model::prelude::command::Command;
+use serenity::model::prelude::{Interaction, InteractionResponseType, Message};
 use serenity::model::Timestamp;
 use serenity::prelude::*;
 
@@ -21,6 +22,8 @@ use surrealdb::Surreal;
 
 type TokenLock = Arc<RwLock<Option<String>>>;
 
+mod commands;
+
 struct Handler {
     client: Arc<RwLock<reqwest::Client>>,
     api: AppleMusicApi,
@@ -29,15 +32,20 @@ struct Handler {
     spotify_regex: Regex,
 }
 
-struct AppleMusicApi {
+pub struct AppleMusicApi {
     client: Arc<RwLock<reqwest::Client>>,
     developer_token: TokenLock,
 }
 
 impl AppleMusicApi {
-    async fn request_endpoint(&self, method: Method, endpoint: &str) -> Value {
+    async fn request_endpoint(
+        &self,
+        method: Method,
+        endpoint: &str,
+    ) -> Result<Value, reqwest::Error> {
         // eeeeeeeeee
-        self.client
+        Ok(self
+            .client
             .read()
             .await
             .request(method, format!("https://api.music.apple.com/{}", endpoint))
@@ -56,11 +64,9 @@ impl AppleMusicApi {
             .header("sec-fetch-mode", "cors")
             .header("sec-fetch-site", "same-site")
             .send()
-            .await
-            .unwrap()
+            .await?
             .json()
-            .await
-            .unwrap()
+            .await?)
     }
 }
 
@@ -133,6 +139,45 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: serenity::prelude::Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
         tokio::task::spawn(status_updater(ctx.clone()));
+
+        // Setup commands
+        let _ = Command::create_global_application_command(&ctx.http, |command| {
+            commands::about::register(command)
+        })
+        .await;
+
+        let _ = Command::create_global_application_command(&ctx.http, |command| {
+            commands::convert::register(command)
+        })
+        .await;
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::ApplicationCommand(command) = interaction {
+            let content = match command.data.name.as_str() {
+                "about" => commands::about::run(&command.data.options),
+                "convert" => {
+                    match commands::convert::run(&command.data.options, &self.api, &self.url_regex)
+                        .await
+                    {
+                        Ok(link) => link,
+                        Err(e) => e.to_string(),
+                    }
+                }
+                _ => "not implemented".to_string(),
+            };
+
+            if let Err(why) = command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| message.content(content))
+                })
+                .await
+            {
+                println!("Cannot respond to slash command: {}", why);
+            }
+        }
     }
 
     async fn message(&self, _ctx: serenity::prelude::Context, mut _new_message: Message) {
@@ -216,13 +261,17 @@ impl EventHandler for Handler {
                     None => parsed_url.path_segments().unwrap().last().unwrap(),
                 };
 
-                resp = self
+                resp = match self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/songs/{}", storefront, &id),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Song;
@@ -254,13 +303,17 @@ impl EventHandler for Handler {
                 );
             } else if url.contains("album") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = self
+                resp = match self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/albums/{}", storefront, id),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Album;
@@ -299,13 +352,17 @@ impl EventHandler for Handler {
                 duration = Duration::from_millis(total_duration);
             } else if url.contains("playlist") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = self
+                resp = match self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/playlists/{}", storefront, id),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Playlist;
@@ -344,13 +401,17 @@ impl EventHandler for Handler {
                 duration = Duration::from_millis(total_duration);
             } else if url.contains("music-video") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = self
+                resp = match self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/music-video/{}", storefront, id),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::MusicVideo;
@@ -379,13 +440,17 @@ impl EventHandler for Handler {
                 );
             } else if url.contains("artist") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = self
+                resp = match self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/artists/{}", storefront, id),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Artist;
@@ -643,7 +708,8 @@ async fn main() {
 
     let intents = GatewayIntents::non_privileged()
         | GatewayIntents::MESSAGE_CONTENT
-        | GatewayIntents::GUILD_MESSAGES;
+        | GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::GUILD_INTEGRATIONS;
 
     tokio::task::spawn(token_updater(developer_token.clone()));
 
