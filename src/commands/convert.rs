@@ -1,5 +1,4 @@
-use std::error::Error;
-use std::fmt;
+use thiserror::Error;
 
 use regex::Regex;
 use serde_json::Value;
@@ -9,26 +8,25 @@ use serenity::{
     builder::CreateApplicationCommand, model::prelude::application_command::CommandDataOptionValue,
 };
 
-use crate::{AppleMusicApi, ValuePath, increment_conversion};
+use crate::{api::AppleMusicApi, util, ValuePath};
 
-#[derive(Debug)]
-struct ConvertError {
-    message: String,
+#[derive(Error, Debug)]
+pub enum ConvertError {
+    #[error("did not input link")]
+    InvalidInput,
+    #[error("content is not a link")]
+    InvalidContent,
+    #[error("could not convert to apple music link")]
+    FailedConversion,
+    #[error("option was not a string")]
+    InvalidOption,
+    #[error("request failed")]
+    RequestError(String),
 }
 
-impl ConvertError {
-    fn new(message: &str) -> Self {
-        Self {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl Error for ConvertError {}
-
-impl fmt::Display for ConvertError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Convert Error: {}", self.message)
+impl From<reqwest::Error> for ConvertError {
+    fn from(value: reqwest::Error) -> Self {
+        ConvertError::RequestError(value.to_string())
     }
 }
 
@@ -36,15 +34,15 @@ pub async fn run(
     _options: &[CommandDataOption],
     token: &AppleMusicApi,
     regex: &Regex,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<String, ConvertError> {
     let opt = match _options.get(0) {
         Some(o) => o.resolved.as_ref(),
-        None => return Err(Box::new(ConvertError::new("Did not input link"))),
+        None => return Err(ConvertError::InvalidInput),
     };
 
     if let CommandDataOptionValue::String(str) = opt.unwrap() {
         if !regex.is_match(&str) {
-            return Err(Box::new(ConvertError::new("Content is not a link")));
+            return Err(ConvertError::InvalidContent);
         }
 
         let response: Value = token
@@ -63,18 +61,14 @@ pub async fn run(
         Ok(
             match response.get_value_by_path("linksByPlatform.appleMusic.url") {
                 Some(url) => {
-                    increment_conversion().await;
+                    util::increment_conversion().await;
                     url.as_str().unwrap().to_string()
-                },
-                None => {
-                    return Err(Box::new(ConvertError::new(
-                        "Unable to convert to apple music link",
-                    )))
                 }
+                None => return Err(ConvertError::FailedConversion),
             },
         )
     } else {
-        Err(Box::new(ConvertError::new("Option was **not** a string")))
+        Err(ConvertError::InvalidOption)
     }
 }
 
