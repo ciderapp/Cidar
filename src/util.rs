@@ -27,22 +27,27 @@ pub fn wh(url: &str, w: u32, h: u32) -> String {
 pub async fn increment_conversion() {
     let mut read_store: Store = match crate::DB.select(("stats", "conversions")).await {
         Ok(s) => s,
-        Err(_) => {
-            let s: Store = crate::DB
-                .create(("stats", "conversions"))
-                .content(Store::default())
-                .await
-                .unwrap();
-            s
-        }
+        Err(_) => create_conversion_counter().await,
     };
+
     read_store.total_conversions += 1;
 
-    let _: Store = crate::DB
+    crate::DB
         .update(("stats", "conversions"))
         .content(read_store)
         .await
-        .unwrap();
+        .unwrap_or_else(|_| eprintln!("failed to update conversions"));
+}
+
+async fn create_conversion_counter() -> Store {
+    let Ok(s) = crate::DB
+        .create(("stats", "conversions"))
+        .content(Store::default())
+        .await else {
+            panic!("failed to create conversions store")
+        };
+
+    s
 }
 
 pub fn split_authors(authors: &str) -> String {

@@ -2,6 +2,9 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use serenity::model::gateway::Activity;
+use serenity::model::user::OnlineStatus;
+
 use crate::{Store, TokenLock};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -12,26 +15,30 @@ struct TokenBody {
 pub async fn token_updater(token: TokenLock) {
     let client = reqwest::Client::new();
     loop {
-        let response: TokenBody = client
+        let Ok(response) = client
             .get("https://api.cider.sh/v1")
             .header("User-Agent", "Cider")
             .header("Referer", "tauri.localhost")
             .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
+            .await else {
+                eprintln!("failed to get new token, keeping previous");
+                return
+            };
 
-        *token.write().await = Some(response.token);
+        let Ok(serialized) = response
+            .json::<TokenBody>()
+            .await else {
+                eprintln!("failed to get new token, keeping previous");
+                return
+            };
+
+        *token.write().await = Some(serialized.token);
 
         tokio::time::sleep(Duration::from_secs(60 * 30)).await; // Sleep for 30 minutes
     }
 }
 
 pub async fn status_updater(ctx: serenity::prelude::Context) {
-    use serenity::model::gateway::Activity;
-    use serenity::model::user::OnlineStatus;
     let status = OnlineStatus::DoNotDisturb;
     loop {
         let read_store: Store = crate::DB
