@@ -20,146 +20,29 @@ use surrealdb::opt::auth::Root;
 use surrealdb::sql::Thing;
 use surrealdb::Surreal;
 
-type TokenLock = Arc<RwLock<Option<String>>>;
-
+mod api;
 mod commands;
+mod updater;
+mod util;
+mod vpath;
+
+use vpath::ValuePath;
+
+type TokenLock = Arc<RwLock<Option<String>>>;
 
 struct Handler {
     client: Arc<RwLock<reqwest::Client>>,
-    api: AppleMusicApi,
+    api: api::AppleMusicApi,
     url_regex: Regex,
     apple_regex: Regex,
     spotify_regex: Regex,
-}
-
-pub struct AppleMusicApi {
-    client: Arc<RwLock<reqwest::Client>>,
-    developer_token: TokenLock,
-}
-
-impl AppleMusicApi {
-    async fn request_endpoint(
-        &self,
-        method: Method,
-        endpoint: &str,
-    ) -> Result<Value, reqwest::Error> {
-        // eeeeeeeeee
-        Ok(self
-            .client
-            .read()
-            .await
-            .request(method, format!("https://api.music.apple.com/{}", endpoint))
-            .header(
-                "Authorization",
-                format!(
-                    "Bearer {}",
-                    self.developer_token.read().await.as_ref().unwrap()
-                ),
-            )
-            .header("DNT", 1)
-            .header("authority", "amp-api.music.apple.com")
-            .header("origin", "https://beta.music.apple.com")
-            .header("referer", "https://beta.music.apple.com")
-            .header("sec-fetch-dest", "empty")
-            .header("sec-fetch-mode", "cors")
-            .header("sec-fetch-site", "same-site")
-            .send()
-            .await?
-            .json()
-            .await?)
-    }
-}
-
-trait ValuePath {
-    // Prevents us from having to have a hundred line structure for values.
-    fn get_value_by_path(&self, path: &str) -> Option<Value>;
-    fn get_vec_len_by_path(&self, path: &str) -> Option<usize>;
-}
-
-impl ValuePath for Value {
-    fn get_value_by_path(&self, path: &str) -> Option<Value> {
-        let mut current = self;
-        for key in path.split('.') {
-            if let Some(index) = key.parse::<usize>().ok() {
-                current = current.get(index)?;
-            } else {
-                current = current.get(key)?;
-            }
-        }
-        Some(current.clone())
-    }
-
-    fn get_vec_len_by_path(&self, path: &str) -> Option<usize> {
-        let mut current = self;
-        for key in path.split('.') {
-            if let Some(index) = key.parse::<usize>().ok() {
-                current = current.get(index)?;
-            } else {
-                current = current.get(key)?;
-            }
-        }
-        Some(current.as_array().unwrap().len())
-    }
-}
-
-trait Time {
-    fn milli_to_hhmmss(&self) -> String;
-}
-
-impl Time for u64 {
-    fn milli_to_hhmmss(&self) -> String {
-        let seconds = self / 1000;
-        let ss = seconds % 60;
-        let mm = (seconds / 60) % 60;
-        let hh = (seconds / (60 * 60)) % 24;
-
-        if hh == 0 && mm != 0 {
-            format!("{:02}:{:02}", mm, ss)
-        } else if hh == 0 && mm == 0 {
-            format!("{:02}", ss)
-        } else {
-            format!("{}:{:02}:{:02}", hh, mm, ss)
-        }
-    }
-}
-
-impl Time for Duration {
-    fn milli_to_hhmmss(&self) -> String {
-        (self.as_millis() as u64).milli_to_hhmmss()
-    }
-}
-
-fn wh(url: &str, w: u32, h: u32) -> String {
-    url.replace("{w}", &format!("{}", w))
-        .replace("{h}", &format!("{}", h))
-}
-
-pub async fn increment_conversion() {
-    let mut read_store: Store = match DB.select(("stats", "conversions")).await {
-        Ok(s) => s,
-        Err(_) => {
-            let s: Store = DB
-                .create(("stats", "conversions"))
-                .content(Store::default())
-                .await
-                .unwrap();
-            s
-        }
-    };
-    read_store.total_conversions += 1;
-
-    let _: Store = DB
-        .update(("stats", "conversions"))
-        .content(read_store)
-        .await
-        .unwrap();
 }
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: serenity::prelude::Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
-        tokio::task::spawn(status_updater(ctx.clone()));
+        tokio::task::spawn(updater::status_updater(ctx.clone()));
 
         // Setup commands
         let _ = Command::create_global_application_command(&ctx.http, |command| {
@@ -175,12 +58,14 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-
-           let _ = command.create_interaction_response(&ctx.http, |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|message| message.content("processing..."))
-                }).await.unwrap();
+            let _ = command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| message.content("processing..."))
+                })
+                .await
+                .unwrap();
 
             let content = match command.data.name.as_str() {
                 "about" => commands::about::run(&command.data.options),
@@ -196,9 +81,7 @@ impl EventHandler for Handler {
             };
 
             if let Err(why) = command
-                .create_followup_message(&ctx.http, |response| {
-                    response.content(content)
-                })
+                .create_followup_message(&ctx.http, |response| response.content(content))
                 .await
             {
                 println!("Cannot respond to slash command: {}", why);
@@ -274,10 +157,10 @@ impl EventHandler for Handler {
             let storefront: Vec<&str> = longer.split('/').collect();
             let storefront = &storefront[1];
 
-            let mut description: String = Default::default();
+            let description: String;
             let mut duration: Duration = Default::default();
 
-            let mut resp: Value = Default::default();
+            let resp: Value;
 
             let mut media = Media::default();
 
@@ -544,7 +427,7 @@ impl EventHandler for Handler {
                                 .as_str()
                                 .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
                         )
-                        .thumbnail(wh(
+                        .thumbnail(util::wh(
                             resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
                                 .as_str()
@@ -557,7 +440,7 @@ impl EventHandler for Handler {
                             f.text(format!(
                                 "Shared by {} | {} • {}",
                                 _new_message.author.name,
-                                duration.milli_to_hhmmss(),
+                                util::milli_to_hhmmss(&duration),
                                 resp.get_value_by_path("data.0.attributes.releaseDate")
                                     .unwrap_or(Value::String("".to_string()))
                                     .as_str()
@@ -626,7 +509,7 @@ impl EventHandler for Handler {
             _new_message.suppress_embeds(&_ctx.http).await.unwrap();
 
             // Update the conversions
-            increment_conversion().await;
+            util::increment_conversion().await;
 
             // Update user information
             let user = User {
@@ -720,14 +603,14 @@ async fn main() {
         | GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::GUILD_INTEGRATIONS;
 
-    tokio::task::spawn(token_updater(developer_token.clone()));
+    tokio::task::spawn(updater::token_updater(developer_token.clone()));
 
     // Only use 1 client for the discord stuffs, if it causes deadlocking, create a client for every request
     let discord_reqwest_client = Arc::new(RwLock::new(reqwest::Client::new()));
 
     let handler = Handler {
         client: discord_reqwest_client.clone(),
-        api: AppleMusicApi {
+        api: api::AppleMusicApi {
             client: discord_reqwest_client.clone(),
             developer_token: developer_token.clone(),
         },
@@ -744,48 +627,5 @@ async fn main() {
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct TokenBody {
-    token: String,
-}
-
-async fn token_updater(token: TokenLock) {
-    let client = reqwest::Client::new();
-    loop {
-        let response: TokenBody = client
-            .get("https://api.cider.sh/v1")
-            .header("User-Agent", "Cider")
-            .header("Referer", "tauri.localhost")
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
-
-        *token.write().await = Some(response.token);
-
-        tokio::time::sleep(Duration::from_secs(60 * 30)).await; // Sleep for 30 minutes
-    }
-}
-
-async fn status_updater(ctx: serenity::prelude::Context) {
-    use serenity::model::gateway::Activity;
-    use serenity::model::user::OnlineStatus;
-    let status = OnlineStatus::DoNotDisturb;
-    loop {
-        let read_store: Store = DB
-            .select(("stats", "conversions"))
-            .await
-            .unwrap_or(Store::default());
-        let activity = Activity::listening(format!(
-            "Cider | {} songs converted",
-            read_store.total_conversions
-        ));
-        ctx.set_presence(Some(activity.clone()), status).await;
-        tokio::time::sleep(Duration::from_secs(10)).await;
     }
 }
