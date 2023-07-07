@@ -1,5 +1,6 @@
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::interaction::application_command::CommandDataOption;
+use crate::util::split_authors;
 
 trait NaIfNone {
     fn na(&self) -> String;
@@ -19,7 +20,7 @@ Build time: {}
 Commit hash: {}
 Rust version: {}",
         option_env!("CARGO_PKG_VERSION").na(),
-        option_env!("CARGO_PKG_AUTHORS").na(),
+        split_authors(&option_env!("CARGO_PKG_AUTHORS").na()),
         option_env!("VERGEN_BUILD_TIMESTAMP").na(),
         option_env!("VERGEN_GIT_SHA").na(),
         option_env!("VERGEN_RUSTC_SEMVER").na()

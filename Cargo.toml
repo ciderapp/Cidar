@@ -3,7 +3,7 @@ name = "cidar"
 version = "0.1.0"
 edition = "2021"
 build = "build.rs"
-authors = ["freehelpdesk <freehelpdesk@proton.me>"]
+authors = ["freehelpdesk <freehelpdesk@proton.me>", "dxbednarczyk <me@dxbednarczyk.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

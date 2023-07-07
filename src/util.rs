@@ -44,3 +44,7 @@ pub async fn increment_conversion() {
         .await
         .unwrap();
 }
+
+pub fn split_authors(authors: &str) -> String {
+    authors.split(':').collect::<Vec<&str>>().join(", ")
+}
