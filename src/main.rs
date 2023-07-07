@@ -1,6 +1,7 @@
-use std::cell::RefCell;
+// use std::cell::RefCell;
+// use std::rc::Rc;
+
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -42,7 +43,7 @@ struct Handler {
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, ctx: serenity::prelude::Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
         tokio::task::spawn(updater::status_updater(ctx.clone()));
 
@@ -73,12 +74,9 @@ impl EventHandler for Handler {
             let content = match command.data.name.as_str() {
                 "about" => commands::about::run(&command.data.options),
                 "convert" => {
-                    match commands::convert::run(&command.data.options, &self.api, &self.url_regex)
+                    commands::convert::run(&command.data.options, &self.api, &self.url_regex)
                         .await
-                    {
-                        Ok(link) => link,
-                        Err(e) => e.to_string(),
-                    }
+                        .unwrap_or_else(|err| err.to_string())
                 }
                 _ => "not implemented".to_string(),
             };
@@ -87,23 +85,23 @@ impl EventHandler for Handler {
                 .edit_original_interaction_response(&ctx.http, |response| response.content(content))
                 .await
             {
-                println!("Cannot respond to slash command: {}", why);
+                println!("Cannot respond to slash command: {why}");
             }
         }
     }
 
-    async fn message(&self, _ctx: serenity::prelude::Context, mut _new_message: Message) {
-        // if _new_message.channel_id.0 != 1125513784384036874 {
+    async fn message(&self, ctx: serenity::prelude::Context, mut new_message: Message) {
+        // if new_message.channel_id.0 != 1125513784384036874 {
         //     return;
         // }
 
         // dont do the bot pls, deleting these next 3 lines of code will cause the entire bot to implode
-        if _new_message.author.bot {
+        if new_message.author.bot {
             return;
         }
 
-        if self.url_regex.is_match(&_new_message.content) {
-            let mut url = match self.url_regex.find(&_new_message.content) {
+        if self.url_regex.is_match(&new_message.content) {
+            let mut url = match self.url_regex.find(&new_message.content) {
                 Some(url) => url.as_str().to_string(),
                 None => return,
             };
@@ -114,25 +112,30 @@ impl EventHandler for Handler {
             }
 
             if self.spotify_regex.is_match(&url) {
-                let response: Value = self
+                // nifty trick to avoid panics using let-else statements
+                // and add some context to the error, even if it's fugly
+
+                let Ok(response) = self
                     .client
                     .read()
                     .await
-                    .get(format!(
-                        "https://api.song.link/v1-alpha.1/links?url={}",
-                        url
-                    ))
+                    .get(format!("https://api.song.link/v1-alpha.1/links?url={url}"))
                     .send()
-                    .await
-                    .unwrap()
-                    .json()
-                    .await
-                    .unwrap();
+                    .await else {
+                        eprintln!("failed to send request to song.link api");
+                        return;
+                    };
 
-                let amurl = match response.get_value_by_path("linksByPlatform.appleMusic.url") {
-                    Some(url) => url,
-                    None => return,
-                };
+                let Ok(serialized) = response
+                    .json::<Value>()
+                    .await else {
+                        eprintln!("failed to serialize response from song.link api");
+                        return;
+                    };
+
+                let amurl = serialized
+                    .get_value_by_path("linksByPlatform.appleMusic.url")
+                    .unwrap();
 
                 url = match amurl.as_str() {
                     Some(url) => url.to_string(),
@@ -157,13 +160,15 @@ impl EventHandler for Handler {
             }
 
             let longer = url.replace("https://", "");
+
             let storefront: Vec<&str> = longer.split('/').collect();
             let storefront = &storefront[1];
 
             let description: String;
+
             let mut duration: Duration = Default::default();
 
-            let resp: Value;
+            let resp: Value = Value::Null;
 
             let mut media = Media::default();
 
@@ -173,26 +178,26 @@ impl EventHandler for Handler {
                     None => parsed_url.path_segments().unwrap().last().unwrap(),
                 };
 
-                resp = match self
+                let Ok(resp) = self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/songs/{}", storefront, &id),
                     )
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
+                    .await else {
+                        eprintln!("failed to request song {id} from the apple music api");
+                        return
+                    };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Song;
 
+                // return useless values instead of panicking
                 let name = resp
                     .get_value_by_path("data.0.attributes.name")
                     .unwrap()
                     .as_str()
-                    .unwrap()
+                    .unwrap_or("N/A")
                     .to_string();
                 media.name = name;
 
@@ -201,11 +206,11 @@ impl EventHandler for Handler {
                     resp.get_value_by_path("data.0.attributes.albumName")
                         .unwrap()
                         .as_str()
-                        .unwrap(),
+                        .unwrap_or("N/A"),
                     resp.get_value_by_path("data.0.attributes.artistName")
                         .unwrap()
                         .as_str()
-                        .unwrap()
+                        .unwrap_or("N/A")
                 );
                 duration = Duration::from_millis(
                     resp.get_value_by_path("data.0.attributes.durationInMillis")
@@ -215,17 +220,16 @@ impl EventHandler for Handler {
                 );
             } else if url.contains("album") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = match self
+                let Ok(resp) = self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/albums/{}", storefront, id),
                     )
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
+                    .await else {
+                        eprintln!("failed to request album {id} from the apple music api");
+                        return
+                    };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Album;
@@ -242,14 +246,14 @@ impl EventHandler for Handler {
                         ))
                         .unwrap()
                         .as_u64()
-                        .unwrap();
+                        .unwrap_or(0);
                 }
 
                 let name = resp
                     .get_value_by_path("data.0.attributes.name")
                     .unwrap()
                     .as_str()
-                    .unwrap()
+                    .unwrap_or("N/A")
                     .to_string();
                 media.name = name.clone();
 
@@ -259,22 +263,21 @@ impl EventHandler for Handler {
                     resp.get_value_by_path("data.0.attributes.artistName")
                         .unwrap()
                         .as_str()
-                        .unwrap()
+                        .unwrap_or("N/A")
                 );
                 duration = Duration::from_millis(total_duration);
             } else if url.contains("playlist") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = match self
+                let Ok(resp) = self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/playlists/{}", storefront, id),
                     )
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
+                    .await else {
+                        eprintln!("failed to request album {id} from the apple music api");
+                        return
+                    };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Playlist;
@@ -291,14 +294,14 @@ impl EventHandler for Handler {
                         ))
                         .unwrap()
                         .as_u64()
-                        .unwrap();
+                        .unwrap_or(0);
                 }
 
                 let name = resp
                     .get_value_by_path("data.0.attributes.name")
                     .unwrap()
                     .as_str()
-                    .unwrap()
+                    .unwrap_or("N/A")
                     .to_string();
                 media.name = name.clone();
 
@@ -308,22 +311,21 @@ impl EventHandler for Handler {
                     resp.get_value_by_path("data.0.attributes.curatorName")
                         .unwrap()
                         .as_str()
-                        .unwrap()
+                        .unwrap_or("N/A")
                 );
                 duration = Duration::from_millis(total_duration);
             } else if url.contains("music-video") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = match self
+                let Ok(resp) = self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/music-video/{}", storefront, id),
                     )
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
+                    .await else {
+                        eprintln!("failed to request album {id} from the apple music api");
+                        return
+                    };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::MusicVideo;
@@ -332,7 +334,7 @@ impl EventHandler for Handler {
                     .get_value_by_path("data.0.attributes.name")
                     .unwrap()
                     .as_str()
-                    .unwrap()
+                    .unwrap_or("N/A")
                     .to_string();
                 media.name = name.clone();
 
@@ -342,7 +344,7 @@ impl EventHandler for Handler {
                     resp.get_value_by_path("data.0.attributes.artistName")
                         .unwrap()
                         .as_str()
-                        .unwrap()
+                        .unwrap_or("N/A")
                 );
                 duration = Duration::from_millis(
                     resp.get_value_by_path("data.0.attributes.durationInMillis")
@@ -352,17 +354,16 @@ impl EventHandler for Handler {
                 );
             } else if url.contains("artist") {
                 let id = parsed_url.path_segments().unwrap().last().unwrap();
-                resp = match self
+                let Ok(resp) = self
                     .api
                     .request_endpoint(
                         Method::GET,
                         &format!("v1/catalog/{}/artists/{}", storefront, id),
                     )
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
+                    .await else {
+                        eprintln!("failed to request album {id} from the apple music api");
+                        return
+                    };
 
                 media.sid = id.to_string();
                 media.media_type = MediaType::Artist;
@@ -371,7 +372,7 @@ impl EventHandler for Handler {
                     .get_value_by_path("data.0.attributes.name")
                     .unwrap()
                     .as_str()
-                    .unwrap()
+                    .unwrap_or("N/A")
                     .to_string();
                 media.name = name.clone();
                 description = format!("Listen to {} on Cider", name);
@@ -381,42 +382,42 @@ impl EventHandler for Handler {
 
             // So if we create an embed each time, it takes 3 entire seconds per the call of the next three lines
             // , we need something better, like creating a wenbook the first time, then re-using.
-            // let mut webhook = _new_message.channel_id.create_webhook(&_ctx.http, "temp-cidar").await.unwrap();
-            // webhook.edit_avatar(&_ctx.http, &*_new_message.author.avatar_url().unwrap()).await.unwrap();
-            // webhook.edit_name(&_ctx.http, &_new_message.author.name).await.unwrap();
+            // let mut webhook = new_message.channel_id.create_webhook(&ctx.http, "temp-cidar").await.unwrap();
+            // webhook.edit_avatar(&ctx.http, &*new_message.author.avatar_url().unwrap()).await.unwrap();
+            // webhook.edit_name(&ctx.http, &new_message.author.name).await.unwrap();
 
             // Speed up from 4 seconds to just 0.70 ish
 
-            // let mut webhook = match _new_message.channel_id.webhooks(&_ctx.http).await {
+            // let mut webhook = match new_message.channel_id.webhooks(&ctx.http).await {
             //     Ok(hooks) => {
             //         let mut iterator = hooks.iter();
             //         // tomfoolery
             //         if let Some(webhook) = iterator.find(|&hook| {
-            //             //println!("bot: {}, http: {}", &hook.user.as_ref().unwrap().id.0, &_ctx.cache.current_user().id.0);
-            //             &hook.user.as_ref().unwrap().id.0 == &_ctx.cache.current_user().id.0
+            //             //println!("bot: {}, http: {}", &hook.user.as_ref().unwrap().id.0, &ctx.cache.current_user().id.0);
+            //             &hook.user.as_ref().unwrap().id.0 == &ctx.cache.current_user().id.0
             //         }) {
             //             webhook.clone()
             //         } else {
-            //             _new_message.channel_id.create_webhook(&_ctx.http, "cidar-webhook").await.unwrap()
+            //             new_message.channel_id.create_webhook(&ctx.http, "cidar-webhook").await.unwrap()
             //         }
             //     },
             //     Err(_) => {
             //         // We actually dont have any webhooks in the channel, so add cidars one.
-            //         _new_message.channel_id.create_webhook(&_ctx.http, "cidar-webhook").await.unwrap()
+            //         new_message.channel_id.create_webhook(&ctx.http, "cidar-webhook").await.unwrap()
             //     }
             // };
 
-            // webhook.edit_avatar(&_ctx.http, &*_new_message.author.avatar_url().unwrap()).await.unwrap();
-            // webhook.edit_name(&_ctx.http, &_new_message.author.name).await.unwrap();
+            // webhook.edit_avatar(&ctx.http, &*new_message.author.avatar_url().unwrap()).await.unwrap();
+            // webhook.edit_name(&ctx.http, &new_message.author.name).await.unwrap();
 
             let modded = url.replace("https://", "");
 
             let play_link = format!("https://cider.sh/p?{}", modded);
             let view_link = format!("https://cider.sh/o?{}", modded);
 
-            _new_message
+            new_message
                 .channel_id
-                .send_message(&_ctx.http, |m| {
+                .send_message(&ctx.http, |m| {
                     m.embed(|e| {
                         e.title(
                             resp.get_value_by_path("data.0.attributes.name")
@@ -434,7 +435,7 @@ impl EventHandler for Handler {
                             resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
                                 .as_str()
-                                .unwrap(),
+                                .unwrap_or(""),
                             512,
                             512,
                         ))
@@ -442,7 +443,7 @@ impl EventHandler for Handler {
                         .footer(|f| {
                             f.text(format!(
                                 "Shared by {} | {} • {}",
-                                _new_message.author.name,
+                                new_message.author.name,
                                 util::milli_to_hhmmss(&duration),
                                 resp.get_value_by_path("data.0.attributes.releaseDate")
                                     .unwrap_or(Value::String("".to_string()))
@@ -476,12 +477,12 @@ impl EventHandler for Handler {
             //         .thumbnail(wh(resp.get_value_by_path("data.0.attributes.artwork.url").unwrap().as_str().unwrap(), 512, 512))
             //         .description(&description)
             //         .footer(|f| {
-            //             f.text(format!("Shared by {} | {} • {}", _new_message.author.name, duration.milli_to_hhmmss(), resp.get_value_by_path("data.0.attributes.releaseDate").unwrap_or(Value::String("".to_string())).as_str().unwrap()))
+            //             f.text(format!("Shared by {} | {} • {}", new_message.author.name, duration.milli_to_hhmmss(), resp.get_value_by_path("data.0.attributes.releaseDate").unwrap_or(Value::String("".to_string())).as_str().unwrap()))
             //         })
             //         .timestamp(Timestamp::now())
             // });
 
-            // webhook.execute(&_ctx.http, false, |m| {
+            // webhook.execute(&ctx.http, false, |m| {
             //     m.content(content).embeds(vec![embed.clone()]).components(|c| {
             //         c.create_action_row(|r| {
             //             r.create_button(|b| {
@@ -498,10 +499,10 @@ impl EventHandler for Handler {
             //     })
             // }).await.unwrap();
 
-            // webhook.edit_name(&_ctx.http, "cidar-webhook").await.unwrap();
-            // webhook.delete_avatar(&_ctx.http).await.unwrap();
+            // webhook.edit_name(&ctx.http, "cidar-webhook").await.unwrap();
+            // webhook.delete_avatar(&ctx.http).await.unwrap();
 
-            // match _new_message.delete(&_ctx.http).await {
+            // match new_message.delete(&ctx.http).await {
             //     Ok(_) => (),
             //     Err(_) => {
             //         println!("failed to delete message");
@@ -509,19 +510,19 @@ impl EventHandler for Handler {
             //     },
             // };
 
-            _new_message.suppress_embeds(&_ctx.http).await.unwrap();
+            new_message.suppress_embeds(&ctx.http).await.unwrap();
 
             // Update the conversions
             util::increment_conversion().await;
 
             // Update user information
             let user = User {
-                username: _new_message.author.name,
+                username: new_message.author.name,
                 ..Default::default()
             };
 
             let _: User = DB
-                .update(("users", _new_message.author.id.0))
+                .update(("users", new_message.author.id.0))
                 .content(user)
                 .await
                 .unwrap();
@@ -537,7 +538,7 @@ impl EventHandler for Handler {
             // For some reason, binding does not work.
             DB.query(&format!(
                 "RELATE users:{}->conversions:{}->media:{}",
-                _new_message.author.id.0, parsed_id, parsed_id
+                new_message.author.id.0, parsed_id, parsed_id
             ))
             .await
             .unwrap();
