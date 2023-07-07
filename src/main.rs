@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -58,6 +60,7 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
+            //let Rc<RefCell<>>
             let _ = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
@@ -81,7 +84,7 @@ impl EventHandler for Handler {
             };
 
             if let Err(why) = command
-                .create_followup_message(&ctx.http, |response| response.content(content))
+                .edit_original_interaction_response(&ctx.http, |response| response.content(content))
                 .await
             {
                 println!("Cannot respond to slash command: {}", why);
