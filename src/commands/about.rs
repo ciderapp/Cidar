@@ -1,6 +1,6 @@
+use crate::util::split_authors;
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::interaction::application_command::CommandDataOption;
-use crate::util::split_authors;
 
 trait NaIfNone {
     fn na(&self) -> String;
