@@ -1,6 +1,4 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -513,34 +511,6 @@ impl EventHandler for Handler {
 
             // Update the conversions
             util::increment_conversion().await;
-
-            // Update user information
-            let user = User {
-                username: _new_message.author.name,
-                ..Default::default()
-            };
-
-            let _: User = DB
-                .update(("users", _new_message.author.id.0))
-                .content(user)
-                .await
-                .unwrap();
-
-            let parsed_id = media.sid.parse::<u64>().unwrap();
-
-            let _: Media = DB
-                .update(("media", parsed_id))
-                .content(media)
-                .await
-                .unwrap();
-
-            // For some reason, binding does not work.
-            DB.query(&format!(
-                "RELATE users:{}->conversions:{}->media:{}",
-                _new_message.author.id.0, parsed_id, parsed_id
-            ))
-            .await
-            .unwrap();
         }
     }
 }
