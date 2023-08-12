@@ -96,9 +96,19 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: serenity::prelude::Context, mut new_message: Message) {
-        // if new_message.channel_id.0 != 1133927653074796555 {
-        //     return;
-        // }
+        const DEBUG_CHANNEL: u64 = 1133927653074796555;
+        
+        // Only allow the debug channel in debug mode.
+        #[cfg(debug_assertions)]
+        if new_message.channel_id.0 != DEBUG_CHANNEL {
+            return;
+        }
+
+        // In release builds, make sure to exclude the debug channel.
+        #[cfg(not(debug_assertions))]
+        if new_message.channel_id.0 == DEBUG_CHANNEL {
+            return;
+        }
 
         // dont do the bot pls, deleting these next 3 lines of code will cause the entire bot to implode
         if new_message.author.bot {
