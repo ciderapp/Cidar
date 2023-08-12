@@ -96,9 +96,9 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: serenity::prelude::Context, mut new_message: Message) {
-        if new_message.channel_id.0 != 1133927653074796555 {
-            return;
-        }
+        // if new_message.channel_id.0 != 1133927653074796555 {
+        //     return;
+        // }
 
         // dont do the bot pls, deleting these next 3 lines of code will cause the entire bot to implode
         if new_message.author.bot {
