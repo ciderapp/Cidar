@@ -639,9 +639,17 @@ static DB: Surreal<Client> = Surreal::init();
 #[tokio::main]
 async fn main() {
     println!("Cidar launching");
+
     let token = std::env::var("TOKEN").expect("Please set the TOKEN env variable");
     let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
     let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
+
+    println!("Starting crash governer");
+
+    let _guard = sentry::init(("https://15cf6882a0fd0152775f80dbbf4b1c4e@o4504730117865472.ingest.sentry.io/4505693108371456", sentry::ClientOptions {
+        release: sentry::release_name!(),
+        ..Default::default()
+    }));
 
     println!("Connecting to SurrealDB @ {}", database_ip);
     DB.connect::<Ws>(database_ip)
