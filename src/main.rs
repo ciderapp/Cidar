@@ -17,7 +17,6 @@ use serenity::prelude::*;
 use regex::Regex;
 use surrealdb::engine::remote::ws::{Client, Ws};
 use surrealdb::opt::auth::Root;
-use surrealdb::sql::Thing;
 use surrealdb::Surreal;
 
 mod api;
@@ -36,6 +35,15 @@ struct Handler {
     url_regex: Regex,
     apple_regex: Regex,
     spotify_regex: Regex,
+}
+
+#[derive(Debug, Default)]
+struct EmbedInformation {
+    title: String,
+    description: String,
+    footer: String,
+    artwork: String,
+    url: String,
 }
 
 #[async_trait]
@@ -88,9 +96,9 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: serenity::prelude::Context, mut new_message: Message) {
-        // if new_message.channel_id.0 != 1125513784384036874 {
-        //     return;
-        // }
+        if new_message.channel_id.0 != 1133927653074796555 {
+            return;
+        }
 
         // dont do the bot pls, deleting these next 3 lines of code will cause the entire bot to implode
         if new_message.author.bot {
@@ -159,253 +167,333 @@ impl EventHandler for Handler {
             let longer = url.replace("https://", "");
 
             let storefront: Vec<&str> = longer.split('/').collect();
-            let storefront = &storefront[1];
-
-            let description: String;
-
-            let mut duration: Duration = Default::default();
-
-            let resp: Value = Value::Null;
-
-            let mut media = Media::default();
-
-            if url.contains("song") || query.contains_key("i") {
-                let id = match query.get("i") {
-                    Some(i) => i,
-                    None => parsed_url.path_segments().unwrap().last().unwrap(),
-                };
-
-                let Ok(resp) = self
-                    .api
-                    .request_endpoint(
-                        Method::GET,
-                        &format!("v1/catalog/{}/songs/{}", storefront, &id),
-                    )
-                    .await else {
-                        eprintln!("failed to request song {id} from the apple music api");
-                        return
-                    };
-
-                media.sid = id.to_string();
-                media.media_type = MediaType::Song;
-
-                // return useless values instead of panicking
-                let name = resp
-                    .get_value_by_path("data.0.attributes.name")
-                    .unwrap()
-                    .as_str()
-                    .unwrap_or("N/A")
-                    .to_string();
-                media.name = name;
-
-                description = format!(
-                    "Listen to {} by {} on Cider",
-                    resp.get_value_by_path("data.0.attributes.albumName")
-                        .unwrap()
-                        .as_str()
-                        .unwrap_or("N/A"),
-                    resp.get_value_by_path("data.0.attributes.artistName")
-                        .unwrap()
-                        .as_str()
-                        .unwrap_or("N/A")
-                );
-                duration = Duration::from_millis(
-                    resp.get_value_by_path("data.0.attributes.durationInMillis")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap_or(0),
-                );
-            } else if url.contains("album") {
-                let id = parsed_url.path_segments().unwrap().last().unwrap();
-                let Ok(resp) = self
-                    .api
-                    .request_endpoint(
-                        Method::GET,
-                        &format!("v1/catalog/{}/albums/{}", storefront, id),
-                    )
-                    .await else {
-                        eprintln!("failed to request album {id} from the apple music api");
-                        return
-                    };
-
-                media.sid = id.to_string();
-                media.media_type = MediaType::Album;
-
-                let mut total_duration: u64 = 0;
-
-                for i in 0..resp
-                    .get_vec_len_by_path("data.0.relationships.tracks.data")
-                    .unwrap()
-                {
-                    total_duration += resp
-                        .get_value_by_path(&format!(
-                            "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
-                        ))
-                        .unwrap()
-                        .as_u64()
-                        .unwrap_or(0);
+            let storefront = match storefront.get(1) {
+                Some(sf) => {
+                    sf
+                },
+                None => {
+                    return;
                 }
+            };
 
-                let name = resp
-                    .get_value_by_path("data.0.attributes.name")
-                    .unwrap()
-                    .as_str()
-                    .unwrap_or("N/A")
-                    .to_string();
-                media.name = name.clone();
 
-                description = format!(
-                    "Listen to {} by {} on Cider",
-                    name,
-                    resp.get_value_by_path("data.0.attributes.artistName")
-                        .unwrap()
-                        .as_str()
-                        .unwrap_or("N/A")
-                );
-                duration = Duration::from_millis(total_duration);
-            } else if url.contains("playlist") {
-                let id = parsed_url.path_segments().unwrap().last().unwrap();
-                let Ok(resp) = self
-                    .api
-                    .request_endpoint(
-                        Method::GET,
-                        &format!("v1/catalog/{}/playlists/{}", storefront, id),
-                    )
-                    .await else {
-                        eprintln!("failed to request album {id} from the apple music api");
-                        return
-                    };
+            // Create a place to store embed information for all of the follwing cases.
+            let mut information = EmbedInformation::default();
 
-                media.sid = id.to_string();
-                media.media_type = MediaType::Playlist;
+            // Determine what type of media it is.
+            if let Some(media) = MediaType::determine(&url) {
+                println!("Converting media type {:?}", &media);
+                match media {
+                    MediaType::Song => {
+                        let id = match query.get("i") {
+                            Some(i) => i,
+                            None => parsed_url.path_segments().unwrap().last().unwrap(),
+                        };
+        
+                        let Ok(resp) = self
+                            .api
+                            .request_endpoint(
+                                Method::GET,
+                                &format!("v1/catalog/{}/songs/{}", storefront, &id),
+                            )
+                            .await else {
+                                eprintln!("failed to request song {id} from the apple music api");
+                                return
+                            };
+        
+        
+                        // return useless values instead of panicking
+                        information.title = resp
+                            .get_value_by_path("data.0.attributes.name")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("N/A")
+                            .to_string();
+        
+                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                            .to_string();
+        
+                        information.description = format!(
+                            "Listen to {} by {} on Cider",
+                            resp.get_value_by_path("data.0.attributes.albumName")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or("N/A"),
+                            resp.get_value_by_path("data.0.attributes.artistName")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or("N/A")
+                        );
 
-                let mut total_duration: u64 = 0;
+                        information.artwork = util::wh(
+                            resp.get_value_by_path("data.0.attributes.artwork.url")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or(""),
+                            512,
+                            512,
+                        );
 
-                for i in 0..resp
-                    .get_vec_len_by_path("data.0.relationships.tracks.data")
-                    .unwrap()
-                {
-                    total_duration += resp
-                        .get_value_by_path(&format!(
-                            "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
-                        ))
-                        .unwrap()
-                        .as_u64()
-                        .unwrap_or(0);
+                        information.footer = format!(
+                            "Shared by {} | {} • {}",
+                            new_message.author.name,
+                            util::milli_to_hhmmss(&Duration::from_millis(
+                                resp.get_value_by_path("data.0.attributes.durationInMillis")
+                                    .unwrap()
+                                    .as_u64()
+                                    .unwrap_or(0),
+                            )),
+                            resp.get_value_by_path("data.0.attributes.releaseDate")
+                                .unwrap_or(Value::String("".to_string()))
+                                .as_str()
+                                .unwrap()
+                        )
+                    },
+                    MediaType::Album => {
+                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let Ok(resp) = self
+                            .api
+                            .request_endpoint(
+                            Method::GET,
+                            &format!("v1/catalog/{}/albums/{}", storefront, id),
+                        )
+                        .await else {
+                            eprintln!("failed to request album {id} from the apple music api");
+                            return
+                        };
+
+                        let mut total_duration: u64 = 0;
+
+                        for i in 0..resp
+                            .get_vec_len_by_path("data.0.relationships.tracks.data")
+                            .unwrap()
+                        {
+                            total_duration += resp
+                                .get_value_by_path(&format!(
+                                "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
+                                ))
+                                .unwrap()
+                                .as_u64()
+                                .unwrap_or(0);
+                        }
+
+                        information.title = resp
+                            .get_value_by_path("data.0.attributes.name")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("N/A")
+                            .to_string();
+
+                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                            .to_string();
+                
+
+                        information.description = format!(
+                            "Listen to {} by {} on Cider",
+                            &information.title,
+                            resp.get_value_by_path("data.0.attributes.artistName")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or("N/A")
+                        );
+
+                        
+                        information.artwork = util::wh(
+                            resp.get_value_by_path("data.0.attributes.artwork.url")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or(""),
+                            512,
+                            512,
+                        );
+
+                        information.footer = format!(
+                            "Shared by {} | {} • {}",
+                            new_message.author.name,
+                            util::milli_to_hhmmss(&Duration::from_millis(total_duration)),
+                            resp.get_value_by_path("data.0.attributes.releaseDate")
+                                .unwrap_or(Value::String("".to_string()))
+                                .as_str()
+                                .unwrap()
+                        )
+                    },
+                    MediaType::Playlist => {
+                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let Ok(resp) = self
+                            .api
+                            .request_endpoint(
+                            Method::GET,
+                            &format!("v1/catalog/{}/playlists/{}", storefront, id),
+                        )
+                        .await else {
+                            eprintln!("failed to request playlists {id} from the apple music api");
+                            return
+                        };
+
+                        let mut total_duration: u64 = 0;
+
+                        for i in 0..resp
+                            .get_vec_len_by_path("data.0.relationships.tracks.data")
+                            .unwrap()
+                        {
+                            total_duration += resp
+                                .get_value_by_path(&format!(
+                                "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
+                                ))
+                                .unwrap()
+                                .as_u64()
+                                .unwrap_or(0);
+                        }
+
+                        information.title = resp
+                            .get_value_by_path("data.0.attributes.name")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("N/A")
+                            .to_string();
+
+                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                            .to_string();
+                
+
+                        information.description = format!(
+                            "Listen to {} by {} on Cider",
+                            &information.title,
+                            resp.get_value_by_path("data.0.attributes.curatorName")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or("N/A")
+                        );
+
+                        
+                        information.artwork = util::wh(
+                            resp.get_value_by_path("data.0.attributes.artwork.url")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or(""),
+                            512,
+                            512,
+                        );
+
+                        information.footer = format!(
+                            "Shared by {} | {}",
+                            new_message.author.name,
+                            util::milli_to_hhmmss(&Duration::from_millis(total_duration)),
+                        )
+                    },
+                    MediaType::MusicVideo => {
+                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let Ok(resp) = self
+                            .api
+                            .request_endpoint(
+                                Method::GET,
+                                &format!("v1/catalog/{}/music-video/{}", storefront, id),
+                            )
+                            .await else {
+                                eprintln!("failed to request album {id} from the apple music api");
+                                return
+                            };
+                        
+                            information.title = resp
+                                .get_value_by_path("data.0.attributes.name")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or("N/A")
+                                .to_string();
+
+                            information.url = resp.get_value_by_path("data.0.attributes.url")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                                .to_string();
+
+                            information.description = format!(
+                                "Listen to {} by {} on Cider",
+                                &information.title,
+                                resp.get_value_by_path("data.0.attributes.artistName")
+                                    .unwrap()
+                                    .as_str()
+                                    .unwrap_or("N/A")
+                            );
+
+                            information.artwork = util::wh(
+                                resp.get_value_by_path("data.0.attributes.artwork.url")
+                                    .unwrap()
+                                    .as_str()
+                                    .unwrap_or(""),
+                                512,
+                                512,
+                            );
+
+                            information.footer = format!(
+                                "Shared by {} | {} • {}",
+                                new_message.author.name,
+                                util::milli_to_hhmmss(&Duration::from_millis(
+                                    resp.get_value_by_path("data.0.attributes.durationInMillis")
+                                        .unwrap()
+                                        .as_u64()
+                                        .unwrap_or(0),
+                                )),
+                                resp.get_value_by_path("data.0.attributes.releaseDate")
+                                    .unwrap_or(Value::String("".to_string()))
+                                    .as_str()
+                                    .unwrap()
+                            )
+                    },
+                    MediaType::Artist => {
+                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let Ok(resp) = self
+                            .api
+                            .request_endpoint(
+                                Method::GET,
+                                &format!("v1/catalog/{}/artists/{}", storefront, id),
+                            )
+                            .await else {
+                                eprintln!("failed to request artist {id} from the apple music api");
+                                return
+                            };
+
+                        information.title = resp
+                            .get_value_by_path("data.0.attributes.name")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("N/A")
+                            .to_string();
+        
+                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                            .to_string();
+        
+                        information.description = format!("Listen to {} on Cider", &information.title);
+
+                        
+                        information.artwork = util::wh(
+                            resp.get_value_by_path("data.0.attributes.artwork.url")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or(""),
+                            512,
+                            512,
+                        );
+
+                        information.footer = format!("Shared by {}", new_message.author.name)
+                    }
                 }
-
-                let name = resp
-                    .get_value_by_path("data.0.attributes.name")
-                    .unwrap()
-                    .as_str()
-                    .unwrap_or("N/A")
-                    .to_string();
-                media.name = name.clone();
-
-                description = format!(
-                    "Listen to {} by {} on Cider",
-                    name,
-                    resp.get_value_by_path("data.0.attributes.curatorName")
-                        .unwrap()
-                        .as_str()
-                        .unwrap_or("N/A")
-                );
-                duration = Duration::from_millis(total_duration);
-            } else if url.contains("music-video") {
-                let id = parsed_url.path_segments().unwrap().last().unwrap();
-                let Ok(resp) = self
-                    .api
-                    .request_endpoint(
-                        Method::GET,
-                        &format!("v1/catalog/{}/music-video/{}", storefront, id),
-                    )
-                    .await else {
-                        eprintln!("failed to request album {id} from the apple music api");
-                        return
-                    };
-
-                media.sid = id.to_string();
-                media.media_type = MediaType::MusicVideo;
-
-                let name = resp
-                    .get_value_by_path("data.0.attributes.name")
-                    .unwrap()
-                    .as_str()
-                    .unwrap_or("N/A")
-                    .to_string();
-                media.name = name.clone();
-
-                description = format!(
-                    "Listen to {} by {} on Cider",
-                    name,
-                    resp.get_value_by_path("data.0.attributes.artistName")
-                        .unwrap()
-                        .as_str()
-                        .unwrap_or("N/A")
-                );
-                duration = Duration::from_millis(
-                    resp.get_value_by_path("data.0.attributes.durationInMillis")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap_or(0),
-                );
-            } else if url.contains("artist") {
-                let id = parsed_url.path_segments().unwrap().last().unwrap();
-                let Ok(resp) = self
-                    .api
-                    .request_endpoint(
-                        Method::GET,
-                        &format!("v1/catalog/{}/artists/{}", storefront, id),
-                    )
-                    .await else {
-                        eprintln!("failed to request album {id} from the apple music api");
-                        return
-                    };
-
-                media.sid = id.to_string();
-                media.media_type = MediaType::Artist;
-
-                let name = resp
-                    .get_value_by_path("data.0.attributes.name")
-                    .unwrap()
-                    .as_str()
-                    .unwrap_or("N/A")
-                    .to_string();
-                media.name = name.clone();
-                description = format!("Listen to {} on Cider", name);
             } else {
+                // We dont support whatever they are trying to convert, so bail out.
                 return;
             }
-
-            // So if we create an embed each time, it takes 3 entire seconds per the call of the next three lines
-            // , we need something better, like creating a wenbook the first time, then re-using.
-            // let mut webhook = new_message.channel_id.create_webhook(&ctx.http, "temp-cidar").await.unwrap();
-            // webhook.edit_avatar(&ctx.http, &*new_message.author.avatar_url().unwrap()).await.unwrap();
-            // webhook.edit_name(&ctx.http, &new_message.author.name).await.unwrap();
-
-            // Speed up from 4 seconds to just 0.70 ish
-
-            // let mut webhook = match new_message.channel_id.webhooks(&ctx.http).await {
-            //     Ok(hooks) => {
-            //         let mut iterator = hooks.iter();
-            //         // tomfoolery
-            //         if let Some(webhook) = iterator.find(|&hook| {
-            //             //println!("bot: {}, http: {}", &hook.user.as_ref().unwrap().id.0, &ctx.cache.current_user().id.0);
-            //             &hook.user.as_ref().unwrap().id.0 == &ctx.cache.current_user().id.0
-            //         }) {
-            //             webhook.clone()
-            //         } else {
-            //             new_message.channel_id.create_webhook(&ctx.http, "cidar-webhook").await.unwrap()
-            //         }
-            //     },
-            //     Err(_) => {
-            //         // We actually dont have any webhooks in the channel, so add cidars one.
-            //         new_message.channel_id.create_webhook(&ctx.http, "cidar-webhook").await.unwrap()
-            //     }
-            // };
-
-            // webhook.edit_avatar(&ctx.http, &*new_message.author.avatar_url().unwrap()).await.unwrap();
-            // webhook.edit_name(&ctx.http, &new_message.author.name).await.unwrap();
 
             let modded = url.replace("https://", "");
 
@@ -416,37 +504,12 @@ impl EventHandler for Handler {
                 .channel_id
                 .send_message(&ctx.http, |m| {
                     m.embed(|e| {
-                        e.title(
-                            resp.get_value_by_path("data.0.attributes.name")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A"),
-                        )
-                        .url(
-                            resp.get_value_by_path("data.0.attributes.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
-                        )
-                        .thumbnail(util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        ))
-                        .description(&description)
+                        e.title(information.title)
+                        .url(information.url)
+                        .thumbnail(information.artwork)
+                        .description(information.description)
                         .footer(|f| {
-                            f.text(format!(
-                                "Shared by {} | {} • {}",
-                                new_message.author.name,
-                                util::milli_to_hhmmss(&duration),
-                                resp.get_value_by_path("data.0.attributes.releaseDate")
-                                    .unwrap_or(Value::String("".to_string()))
-                                    .as_str()
-                                    .unwrap()
-                            ))
+                            f.text(information.footer)
                         })
                         .timestamp(Timestamp::now())
                     })
@@ -468,45 +531,6 @@ impl EventHandler for Handler {
                 .await
                 .unwrap();
 
-            // let embed = Embed::fake(|e| {
-            //     e.title(resp.get_value_by_path("data.0.attributes.name").unwrap().as_str().unwrap_or("N/A"))
-            //         .url(resp.get_value_by_path("data.0.attributes.url").unwrap().as_str().unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
-            //         .thumbnail(wh(resp.get_value_by_path("data.0.attributes.artwork.url").unwrap().as_str().unwrap(), 512, 512))
-            //         .description(&description)
-            //         .footer(|f| {
-            //             f.text(format!("Shared by {} | {} • {}", new_message.author.name, duration.milli_to_hhmmss(), resp.get_value_by_path("data.0.attributes.releaseDate").unwrap_or(Value::String("".to_string())).as_str().unwrap()))
-            //         })
-            //         .timestamp(Timestamp::now())
-            // });
-
-            // webhook.execute(&ctx.http, false, |m| {
-            //     m.content(content).embeds(vec![embed.clone()]).components(|c| {
-            //         c.create_action_row(|r| {
-            //             r.create_button(|b| {
-            //                 b.label("Play in Cider")
-            //                 .style(ButtonStyle::Link)
-            //                 .url(play_link)
-            //             })
-            //             .create_button(|b| {
-            //                 b.label("View in Cider")
-            //                 .style(ButtonStyle::Link)
-            //                 .url(view_link)
-            //             })
-            //         })
-            //     })
-            // }).await.unwrap();
-
-            // webhook.edit_name(&ctx.http, "cidar-webhook").await.unwrap();
-            // webhook.delete_avatar(&ctx.http).await.unwrap();
-
-            // match new_message.delete(&ctx.http).await {
-            //     Ok(_) => (),
-            //     Err(_) => {
-            //         println!("failed to delete message");
-            //         return
-            //     },
-            // };
-
             new_message.suppress_embeds(&ctx.http).await.unwrap();
 
             // Update the conversions
@@ -521,12 +545,6 @@ struct Store {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-struct User {
-    id: Option<Thing>,
-    username: String,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
 enum MediaType {
     #[default]
     Song,
@@ -536,15 +554,23 @@ enum MediaType {
     Artist,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct Media {
-    #[serde(skip_serializing)]
-    id: Option<Thing>,
-    name: String,
-    media_type: MediaType,
-
-    #[serde(skip_serializing, skip_deserializing)]
-    sid: String,
+impl MediaType {
+    fn determine(url: &str) -> Option<MediaType> {
+        // This is hacky, but should work pretty well iirc
+        if url.contains("?i=") || url.contains("song") {
+            Some(MediaType::Song)
+        } else if url.contains("album") {
+            Some(MediaType::Album)
+        } else if url.contains("playlist") {
+            Some(MediaType::Playlist)
+        } else if url.contains("music-video") {
+            Some(MediaType::MusicVideo)
+        } else if url.contains("artist") {
+            Some(MediaType::Artist)
+        } else {
+            None
+        }
+    }
 }
 
 static DB: Surreal<Client> = Surreal::init();
