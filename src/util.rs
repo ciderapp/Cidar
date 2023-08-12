@@ -36,7 +36,7 @@ pub async fn increment_conversion() {
         .update(("stats", "conversions"))
         .content(read_store)
         .await
-        .unwrap_or_else(|_| eprintln!("failed to update conversions"));
+        .unwrap_or_else(|_| eprintln!("Failed to update conversions"));
 }
 
 async fn create_conversion_counter() -> Store {
@@ -44,7 +44,7 @@ async fn create_conversion_counter() -> Store {
         .create(("stats", "conversions"))
         .content(Store::default())
         .await else {
-            panic!("failed to create conversions store")
+            panic!("Failed to create conversions store")
         };
 
     s

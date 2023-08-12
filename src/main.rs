@@ -613,21 +613,33 @@ enum MediaType {
 
 impl MediaType {
     fn determine(url: &str) -> Option<MediaType> {
-        // This is hacky, but should work pretty well iirc
-        if url.contains("?i=") || url.contains("song") {
-            Some(MediaType::Song)
-        } else if url.contains("album") {
-            Some(MediaType::Album)
-        } else if url.contains("station") {
-            Some(MediaType::Station)
-        } else if url.contains("playlist") {
-            Some(MediaType::Playlist)
-        } else if url.contains("music-video") {
-            Some(MediaType::MusicVideo)
-        } else if url.contains("artist") {
-            Some(MediaType::Artist)
-        } else {
-            None
+        // https://music.apple.com/us/artist/dax/1368102340
+        // We need to get the 1st index of this to properly match the strings.
+        let url = match Url::parse(url) {
+            Ok(u) => u,
+            Err(_) => return None,
+        };
+
+        let segments = url.path_segments().unwrap().collect::<Vec<&str>>();
+
+        let media_type = match segments.get(1) {
+            Some(t) => t,
+            None => return None,
+        };
+
+        match *media_type {
+            "song" => Some(MediaType::Song),
+            "album" => Some(MediaType::Album),
+            "artist" => Some(MediaType::Artist),
+            "music-video" => Some(MediaType::MusicVideo),
+            "playlist" => Some(MediaType::Playlist),
+            "station" => Some(MediaType::Station),
+            _ => {
+                println!("Unknown media type {}", media_type);
+                println!("info:");
+                println!("\turl: {}", &url);
+                None
+            },
         }
     }
 }
@@ -641,7 +653,7 @@ async fn main() {
     let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
     let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
 
-    println!("Connecting to database");
+    println!("Connecting to SurrealDB @ {}", database_ip);
     DB.connect::<Ws>(database_ip)
         .await
         .expect("Unable to connect to database");

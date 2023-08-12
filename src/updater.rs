@@ -21,14 +21,14 @@ pub async fn token_updater(token: TokenLock) {
             .header("Referer", "tauri.localhost")
             .send()
             .await else {
-                eprintln!("failed to get new token, keeping previous");
+                eprintln!("Failed to get new token, keeping previous");
                 return
             };
 
         let Ok(serialized) = response
             .json::<TokenBody>()
             .await else {
-                eprintln!("failed to get new token, keeping previous");
+                eprintln!("Failed to get new token, keeping previous");
                 return
             };
 
