@@ -41,7 +41,7 @@ pub async fn run(
     };
 
     if let CommandDataOptionValue::String(str) = opt.unwrap() {
-        if !regex.is_match(&str) {
+        if !regex.is_match(str) {
             return Err(ConvertError::InvalidContent);
         }
 
