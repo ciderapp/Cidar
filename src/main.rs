@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use reqwest::{Method, Url};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use serenity::async_trait;
 use serenity::framework::StandardFramework;
 use serenity::model::application::component::ButtonStyle;
@@ -23,9 +22,9 @@ mod api;
 mod commands;
 mod updater;
 mod util;
-mod vpath;
+mod models;
 
-use vpath::ValuePath;
+use util::LastElement;
 
 type TokenLock = Arc<RwLock<Option<String>>>;
 
@@ -142,20 +141,13 @@ impl EventHandler for Handler {
                     };
 
                 let Ok(serialized) = response
-                    .json::<Value>()
+                    .json::<models::songlink::SongLink>()
                     .await else {
                         eprintln!("failed to serialize response from song.link api");
                         return;
                     };
 
-                let amurl = serialized
-                    .get_value_by_path("linksByPlatform.appleMusic.url")
-                    .unwrap();
-
-                url = match amurl.as_str() {
-                    Some(url) => url.to_string(),
-                    None => return,
-                };
+                url = serialized.links_by_platform.apple_music.url
             }
 
             let parsed_url = match Url::parse(&url) {
@@ -208,38 +200,20 @@ impl EventHandler for Handler {
                                 return
                             };
 
-                        // return useless values instead of panicking
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
+                        let data: models::songs::Song = serde_json::from_value(resp).unwrap();
 
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
+                        // return useless values instead of panicking
+                        information.title = data.data[0].attributes.name.clone();
+                        information.url = data.data[0].attributes.url.clone();
 
                         information.description = format!(
                             "Listen to {} by {} on Cider",
-                            resp.get_value_by_path("data.0.attributes.albumName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A"),
-                            resp.get_value_by_path("data.0.attributes.artistName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
+                            data.data[0].attributes.album_name.clone(),
+                            data.data[0].attributes.artist_name.clone()
                         );
 
                         information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
+                            &data.data[0].attributes.artwork.url.clone(),
                             512,
                             512,
                         );
@@ -248,19 +222,17 @@ impl EventHandler for Handler {
                             "Shared by {} | {} • {}",
                             new_message.author.name,
                             util::milli_to_hhmmss(&Duration::from_millis(
-                                resp.get_value_by_path("data.0.attributes.durationInMillis")
-                                    .unwrap()
-                                    .as_u64()
-                                    .unwrap_or(0),
+                                data.data[0].attributes.duration_in_millis,
                             )),
-                            resp.get_value_by_path("data.0.attributes.releaseDate")
-                                .unwrap_or(Value::String("".to_string()))
-                                .as_str()
-                                .unwrap()
+                            data.data[0].attributes.release_date.clone()
                         )
                     }
                     MediaType::Album => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let id = match parsed_url.get_last_element() {
+                            Some(id) => id,
+                            None => return
+                        };
+
                         let Ok(resp) = self
                             .api
                             .request_endpoint(
@@ -272,49 +244,24 @@ impl EventHandler for Handler {
                             return
                         };
 
+                        let data: models::albums::Album = serde_json::from_value(resp).unwrap();
+
                         let mut total_duration: u64 = 0;
 
-                        for i in 0..resp
-                            .get_vec_len_by_path("data.0.relationships.tracks.data")
-                            .unwrap()
-                        {
-                            total_duration += resp
-                                .get_value_by_path(&format!(
-                                "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
-                                ))
-                                .unwrap()
-                                .as_u64()
-                                .unwrap_or(0);
+                        for song in &data.data[0].relationships.tracks.data {
+                            total_duration += song.attributes.duration_in_millis
                         }
 
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
+                        information.title = data.data[0].attributes.name.clone();
+                        information.url = data.data[0].attributes.url.clone();
                         information.description = format!(
                             "Listen to {} by {} on Cider",
                             &information.title,
-                            resp.get_value_by_path("data.0.attributes.artistName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
+                            data.data[0].attributes.artist_name.clone()
                         );
 
                         information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
+                            &data.data[0].attributes.artwork.url.clone(),
                             512,
                             512,
                         );
@@ -323,14 +270,15 @@ impl EventHandler for Handler {
                             "Shared by {} | {} • {}",
                             new_message.author.name,
                             util::milli_to_hhmmss(&Duration::from_millis(total_duration)),
-                            resp.get_value_by_path("data.0.attributes.releaseDate")
-                                .unwrap_or(Value::String("".to_string()))
-                                .as_str()
-                                .unwrap()
+                            data.data[0].attributes.release_date.clone()
                         )
                     }
                     MediaType::Station => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let id = match parsed_url.get_last_element() {
+                            Some(id) => id,
+                            None => return
+                        };
+
                         let Ok(resp) = self
                             .api
                             .request_endpoint(
@@ -342,28 +290,16 @@ impl EventHandler for Handler {
                             return
                         };
 
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
+                        let data: models::stations::Station = serde_json::from_value(resp).unwrap();
 
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
+                        information.title = data.data[0].attributes.name.clone();
+                        information.url = data.data[0].attributes.url.clone();
 
                         information.description =
                             format!("Tune into {} on Cider", &information.title);
 
                         information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
+                            &data.data[0].attributes.artwork.url.clone(),
                             512,
                             512,
                         );
@@ -371,7 +307,11 @@ impl EventHandler for Handler {
                         information.footer = format!("Shared by {}", new_message.author.name)
                     }
                     MediaType::Playlist => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let id = match parsed_url.get_last_element() {
+                            Some(id) => id,
+                            None => return
+                        };
+
                         let Ok(resp) = self
                             .api
                             .request_endpoint(
@@ -383,49 +323,25 @@ impl EventHandler for Handler {
                             return
                         };
 
+                        let data: models::playlists::Playlist = serde_json::from_value(resp).unwrap();
+
                         let mut total_duration: u64 = 0;
 
-                        for i in 0..resp
-                            .get_vec_len_by_path("data.0.relationships.tracks.data")
-                            .unwrap()
-                        {
-                            total_duration += resp
-                                .get_value_by_path(&format!(
-                                "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
-                                ))
-                                .unwrap()
-                                .as_u64()
-                                .unwrap_or(0);
+                        for song in &data.data[0].relationships.tracks.data {
+                            total_duration += song.attributes.duration_in_millis
                         }
 
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
+                        information.title = data.data[0].attributes.name.clone();
+                        information.url = data.data[0].attributes.url.clone();
 
                         information.description = format!(
                             "Listen to {} by {} on Cider",
                             &information.title,
-                            resp.get_value_by_path("data.0.attributes.curatorName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
+                            data.data[0].attributes.curator_name.clone()
                         );
 
                         information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
+                            &data.data[0].attributes.artwork.url.clone(),
                             512,
                             512,
                         );
@@ -437,7 +353,11 @@ impl EventHandler for Handler {
                         )
                     }
                     MediaType::MusicVideo => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let id = match parsed_url.get_last_element() {
+                            Some(id) => id,
+                            None => return
+                        };
+
                         let Ok(resp) = self
                             .api
                             .request_endpoint(
@@ -449,34 +369,19 @@ impl EventHandler for Handler {
                                 return
                             };
 
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
+                        let data: models::musicvideos::MusicVideo = serde_json::from_value(resp).unwrap();
 
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
+                        information.title = data.data[0].attributes.name.clone();
+                        information.url = data.data[0].attributes.url.clone();
 
                         information.description = format!(
                             "Listen to {} by {} on Cider",
                             &information.title,
-                            resp.get_value_by_path("data.0.attributes.artistName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
+                            data.data[0].attributes.artist_name.clone()
                         );
 
                         information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
+                            &data.data[0].attributes.artwork.url.clone(),
                             512,
                             512,
                         );
@@ -485,19 +390,17 @@ impl EventHandler for Handler {
                             "Shared by {} | {} • {}",
                             new_message.author.name,
                             util::milli_to_hhmmss(&Duration::from_millis(
-                                resp.get_value_by_path("data.0.attributes.durationInMillis")
-                                    .unwrap()
-                                    .as_u64()
-                                    .unwrap_or(0),
+                                data.data[0].attributes.duration_in_millis.clone(),
                             )),
-                            resp.get_value_by_path("data.0.attributes.releaseDate")
-                                .unwrap_or(Value::String("".to_string()))
-                                .as_str()
-                                .unwrap()
+                            data.data[0].attributes.release_date.clone()
                         )
                     }
                     MediaType::Artist => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let id = match parsed_url.get_last_element() {
+                            Some(id) => id,
+                            None => return
+                        };
+
                         let Ok(resp) = self
                             .api
                             .request_endpoint(
@@ -509,28 +412,16 @@ impl EventHandler for Handler {
                                 return
                             };
 
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
+                        let data: models::artists::Artist = serde_json::from_value(resp).unwrap();
 
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
+                        information.title = data.data[0].attributes.name.clone();
+                        information.url = data.data[0].attributes.url.clone();
 
                         information.description =
                             format!("Listen to {} on Cider", &information.title);
 
                         information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
+                            &data.data[0].attributes.artwork.url.clone(),
                             512,
                             512,
                         );

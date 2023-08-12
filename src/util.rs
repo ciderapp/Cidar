@@ -1,4 +1,5 @@
 use std::time::Duration;
+use url::Url;
 
 use crate::Store;
 
@@ -52,4 +53,18 @@ async fn create_conversion_counter() -> Store {
 
 pub fn split_authors(authors: &str) -> String {
     authors.split(':').collect::<Vec<&str>>().join(", ")
+}
+
+pub trait LastElement {
+    fn get_last_element(&self) -> Option<String>;
+}
+
+impl LastElement for Url {
+    fn get_last_element(&self) -> Option<String> {
+        let elements = match self.path_segments() {
+            Some(e) => e,
+            None => return None,
+        };
+        elements.last().map(|s| s.to_string())
+    }
 }

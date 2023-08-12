@@ -1,14 +1,14 @@
 use thiserror::Error;
 
 use regex::Regex;
-use serde_json::Value;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::interaction::application_command::CommandDataOption;
 use serenity::{
     builder::CreateApplicationCommand, model::prelude::application_command::CommandDataOptionValue,
 };
 
-use crate::{api::AppleMusicApi, util, ValuePath};
+use crate::models;
+use crate::api::AppleMusicApi;
 
 #[derive(Error, Debug)]
 pub enum ConvertError {
@@ -17,8 +17,6 @@ pub enum ConvertError {
     #[error("content is not a link")]
     InvalidContent,
     #[error("could not convert to apple music link")]
-    FailedConversion,
-    #[error("option was not a string")]
     InvalidOption,
     #[error("request failed")]
     RequestError(String),
@@ -45,7 +43,7 @@ pub async fn run(
             return Err(ConvertError::InvalidContent);
         }
 
-        let response: Value = token
+        let response: models::songlink::SongLink = token
             .client
             .read()
             .await
@@ -55,18 +53,10 @@ pub async fn run(
             ))
             .send()
             .await?
-            .json()
+            .json::<models::songlink::SongLink>()
             .await?;
 
-        Ok(
-            match response.get_value_by_path("linksByPlatform.appleMusic.url") {
-                Some(url) => {
-                    util::increment_conversion().await;
-                    url.as_str().unwrap().to_string()
-                }
-                None => return Err(ConvertError::FailedConversion),
-            },
-        )
+        Ok(response.links_by_platform.apple_music.url)
     } else {
         Err(ConvertError::InvalidOption)
     }
