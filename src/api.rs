@@ -20,29 +20,26 @@ impl AppleMusicApi {
         method: Method,
         endpoint: &str,
     ) -> Result<Value, reqwest::Error> {
-
         let req = self
-        .client
-        .read()
-        .await
-        .request(method, format!("https://api.music.apple.com/{}", endpoint))
-        .headers(Self::build_headers(
-            self.developer_token.read().await.as_ref().unwrap(),
-        ))
-        .send()
-        .await?;
+            .client
+            .read()
+            .await
+            .request(method, format!("https://api.music.apple.com/{}", endpoint))
+            .headers(Self::build_headers(
+                self.developer_token.read().await.as_ref().unwrap(),
+            ))
+            .send()
+            .await?;
 
         // let txt = req.text().await.unwrap();
 
         // Ok(serde_json::from_str::<Value>(&txt).unwrap())
-        
+
         //println!("{:#?}", req.headers());
         //println!("{:#?}", req.text().await);
-    
+
         //this function works on hope alone
-        Ok(req
-            .json()
-            .await?)
+        req.json().await
     }
 
     fn build_headers(token: &String) -> HeaderMap {

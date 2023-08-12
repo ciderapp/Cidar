@@ -97,7 +97,7 @@ impl EventHandler for Handler {
 
     async fn message(&self, ctx: serenity::prelude::Context, mut new_message: Message) {
         const DEBUG_CHANNEL: u64 = 1133927653074796555;
-        
+
         // Only allow the debug channel in debug mode.
         #[cfg(debug_assertions)]
         if new_message.channel_id.0 != DEBUG_CHANNEL {
@@ -178,14 +178,11 @@ impl EventHandler for Handler {
 
             let storefront: Vec<&str> = longer.split('/').collect();
             let storefront = match storefront.get(1) {
-                Some(sf) => {
-                    sf
-                },
+                Some(sf) => sf,
                 None => {
                     return;
                 }
             };
-
 
             // Create a place to store embed information for all of the follwing cases.
             let mut information = EmbedInformation::default();
@@ -199,7 +196,7 @@ impl EventHandler for Handler {
                             Some(i) => i,
                             None => parsed_url.path_segments().unwrap().last().unwrap(),
                         };
-        
+
                         let Ok(resp) = self
                             .api
                             .request_endpoint(
@@ -210,8 +207,7 @@ impl EventHandler for Handler {
                                 eprintln!("failed to request song {id} from the apple music api");
                                 return
                             };
-        
-        
+
                         // return useless values instead of panicking
                         information.title = resp
                             .get_value_by_path("data.0.attributes.name")
@@ -219,13 +215,14 @@ impl EventHandler for Handler {
                             .as_str()
                             .unwrap_or("N/A")
                             .to_string();
-        
-                        information.url = resp.get_value_by_path("data.0.attributes.url")
+
+                        information.url = resp
+                            .get_value_by_path("data.0.attributes.url")
                             .unwrap()
                             .as_str()
                             .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
                             .to_string();
-        
+
                         information.description = format!(
                             "Listen to {} by {} on Cider",
                             resp.get_value_by_path("data.0.attributes.albumName")
@@ -261,7 +258,7 @@ impl EventHandler for Handler {
                                 .as_str()
                                 .unwrap()
                         )
-                    },
+                    }
                     MediaType::Album => {
                         let id = parsed_url.path_segments().unwrap().last().unwrap();
                         let Ok(resp) = self
@@ -297,12 +294,12 @@ impl EventHandler for Handler {
                             .unwrap_or("N/A")
                             .to_string();
 
-                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                        information.url = resp
+                            .get_value_by_path("data.0.attributes.url")
                             .unwrap()
                             .as_str()
                             .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
                             .to_string();
-                
 
                         information.description = format!(
                             "Listen to {} by {} on Cider",
@@ -313,7 +310,6 @@ impl EventHandler for Handler {
                                 .unwrap_or("N/A")
                         );
 
-                        
                         information.artwork = util::wh(
                             resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
@@ -332,7 +328,7 @@ impl EventHandler for Handler {
                                 .as_str()
                                 .unwrap()
                         )
-                    },
+                    }
                     MediaType::Station => {
                         let id = parsed_url.path_segments().unwrap().last().unwrap();
                         let Ok(resp) = self
@@ -353,18 +349,16 @@ impl EventHandler for Handler {
                             .unwrap_or("N/A")
                             .to_string();
 
-                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                        information.url = resp
+                            .get_value_by_path("data.0.attributes.url")
                             .unwrap()
                             .as_str()
                             .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
                             .to_string();
-                
 
-                        information.description = format!(
-                            "Tune into {} on Cider",
-                            &information.title
-                        );
-                        
+                        information.description =
+                            format!("Tune into {} on Cider", &information.title);
+
                         information.artwork = util::wh(
                             resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
@@ -374,11 +368,8 @@ impl EventHandler for Handler {
                             512,
                         );
 
-                        information.footer = format!(
-                            "Shared by {}",
-                            new_message.author.name
-                        )
-                    },
+                        information.footer = format!("Shared by {}", new_message.author.name)
+                    }
                     MediaType::Playlist => {
                         let id = parsed_url.path_segments().unwrap().last().unwrap();
                         let Ok(resp) = self
@@ -414,12 +405,12 @@ impl EventHandler for Handler {
                             .unwrap_or("N/A")
                             .to_string();
 
-                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                        information.url = resp
+                            .get_value_by_path("data.0.attributes.url")
                             .unwrap()
                             .as_str()
                             .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
                             .to_string();
-                
 
                         information.description = format!(
                             "Listen to {} by {} on Cider",
@@ -430,7 +421,6 @@ impl EventHandler for Handler {
                                 .unwrap_or("N/A")
                         );
 
-                        
                         information.artwork = util::wh(
                             resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
@@ -445,7 +435,7 @@ impl EventHandler for Handler {
                             new_message.author.name,
                             util::milli_to_hhmmss(&Duration::from_millis(total_duration)),
                         )
-                    },
+                    }
                     MediaType::MusicVideo => {
                         let id = parsed_url.path_segments().unwrap().last().unwrap();
                         let Ok(resp) = self
@@ -458,53 +448,54 @@ impl EventHandler for Handler {
                                 eprintln!("failed to request album {id} from the apple music api");
                                 return
                             };
-                        
-                            information.title = resp
-                                .get_value_by_path("data.0.attributes.name")
+
+                        information.title = resp
+                            .get_value_by_path("data.0.attributes.name")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("N/A")
+                            .to_string();
+
+                        information.url = resp
+                            .get_value_by_path("data.0.attributes.url")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                            .to_string();
+
+                        information.description = format!(
+                            "Listen to {} by {} on Cider",
+                            &information.title,
+                            resp.get_value_by_path("data.0.attributes.artistName")
                                 .unwrap()
                                 .as_str()
                                 .unwrap_or("N/A")
-                                .to_string();
+                        );
 
-                            information.url = resp.get_value_by_path("data.0.attributes.url")
+                        information.artwork = util::wh(
+                            resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
                                 .as_str()
-                                .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                                .to_string();
+                                .unwrap_or(""),
+                            512,
+                            512,
+                        );
 
-                            information.description = format!(
-                                "Listen to {} by {} on Cider",
-                                &information.title,
-                                resp.get_value_by_path("data.0.attributes.artistName")
+                        information.footer = format!(
+                            "Shared by {} | {} • {}",
+                            new_message.author.name,
+                            util::milli_to_hhmmss(&Duration::from_millis(
+                                resp.get_value_by_path("data.0.attributes.durationInMillis")
                                     .unwrap()
-                                    .as_str()
-                                    .unwrap_or("N/A")
-                            );
-
-                            information.artwork = util::wh(
-                                resp.get_value_by_path("data.0.attributes.artwork.url")
-                                    .unwrap()
-                                    .as_str()
-                                    .unwrap_or(""),
-                                512,
-                                512,
-                            );
-
-                            information.footer = format!(
-                                "Shared by {} | {} • {}",
-                                new_message.author.name,
-                                util::milli_to_hhmmss(&Duration::from_millis(
-                                    resp.get_value_by_path("data.0.attributes.durationInMillis")
-                                        .unwrap()
-                                        .as_u64()
-                                        .unwrap_or(0),
-                                )),
-                                resp.get_value_by_path("data.0.attributes.releaseDate")
-                                    .unwrap_or(Value::String("".to_string()))
-                                    .as_str()
-                                    .unwrap()
-                            )
-                    },
+                                    .as_u64()
+                                    .unwrap_or(0),
+                            )),
+                            resp.get_value_by_path("data.0.attributes.releaseDate")
+                                .unwrap_or(Value::String("".to_string()))
+                                .as_str()
+                                .unwrap()
+                        )
+                    }
                     MediaType::Artist => {
                         let id = parsed_url.path_segments().unwrap().last().unwrap();
                         let Ok(resp) = self
@@ -524,16 +515,17 @@ impl EventHandler for Handler {
                             .as_str()
                             .unwrap_or("N/A")
                             .to_string();
-        
-                        information.url = resp.get_value_by_path("data.0.attributes.url")
+
+                        information.url = resp
+                            .get_value_by_path("data.0.attributes.url")
                             .unwrap()
                             .as_str()
                             .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
                             .to_string();
-        
-                        information.description = format!("Listen to {} on Cider", &information.title);
 
-                        
+                        information.description =
+                            format!("Listen to {} on Cider", &information.title);
+
                         information.artwork = util::wh(
                             resp.get_value_by_path("data.0.attributes.artwork.url")
                                 .unwrap()
@@ -561,13 +553,11 @@ impl EventHandler for Handler {
                 .send_message(&ctx.http, |m| {
                     m.embed(|e| {
                         e.title(information.title)
-                        .url(information.url)
-                        .thumbnail(information.artwork)
-                        .description(information.description)
-                        .footer(|f| {
-                            f.text(information.footer)
-                        })
-                        .timestamp(Timestamp::now())
+                            .url(information.url)
+                            .thumbnail(information.artwork)
+                            .description(information.description)
+                            .footer(|f| f.text(information.footer))
+                            .timestamp(Timestamp::now())
                     })
                     .components(|c| {
                         c.create_action_row(|r| {
@@ -639,7 +629,7 @@ impl MediaType {
                 println!("info:");
                 println!("\turl: {}", &url);
                 None
-            },
+            }
         }
     }
 }

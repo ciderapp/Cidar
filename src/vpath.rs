@@ -10,7 +10,7 @@ impl ValuePath for Value {
     fn get_value_by_path(&self, path: &str) -> Option<Value> {
         let mut current = self;
         for key in path.split('.') {
-            if let Some(index) = key.parse::<usize>().ok() {
+            if let Ok(index) = key.parse::<usize>() {
                 current = current.get(index)?;
             } else {
                 current = current.get(key)?;
@@ -22,7 +22,7 @@ impl ValuePath for Value {
     fn get_vec_len_by_path(&self, path: &str) -> Option<usize> {
         let mut current = self;
         for key in path.split('.') {
-            if let Some(index) = key.parse::<usize>().ok() {
+            if let Ok(index) = key.parse::<usize>() {
                 current = current.get(index)?;
             } else {
                 current = current.get(key)?;
