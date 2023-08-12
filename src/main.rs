@@ -323,6 +323,52 @@ impl EventHandler for Handler {
                                 .unwrap()
                         )
                     },
+                    MediaType::Station => {
+                        let id = parsed_url.path_segments().unwrap().last().unwrap();
+                        let Ok(resp) = self
+                            .api
+                            .request_endpoint(
+                            Method::GET,
+                            &format!("v1/catalog/{}/stations/{}", storefront, id),
+                        )
+                        .await else {
+                            eprintln!("failed to request playlists {id} from the apple music api");
+                            return
+                        };
+
+                        information.title = resp
+                            .get_value_by_path("data.0.attributes.name")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("N/A")
+                            .to_string();
+
+                        information.url = resp.get_value_by_path("data.0.attributes.url")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                            .to_string();
+                
+
+                        information.description = format!(
+                            "Tune into {} on Cider",
+                            &information.title
+                        );
+                        
+                        information.artwork = util::wh(
+                            resp.get_value_by_path("data.0.attributes.artwork.url")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or(""),
+                            512,
+                            512,
+                        );
+
+                        information.footer = format!(
+                            "Shared by {}",
+                            new_message.author.name
+                        )
+                    },
                     MediaType::Playlist => {
                         let id = parsed_url.path_segments().unwrap().last().unwrap();
                         let Ok(resp) = self
@@ -551,6 +597,7 @@ enum MediaType {
     Album,
     Playlist,
     MusicVideo,
+    Station,
     Artist,
 }
 
@@ -561,6 +608,8 @@ impl MediaType {
             Some(MediaType::Song)
         } else if url.contains("album") {
             Some(MediaType::Album)
+        } else if url.contains("station") {
+            Some(MediaType::Station)
         } else if url.contains("playlist") {
             Some(MediaType::Playlist)
         } else if url.contains("music-video") {

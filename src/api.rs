@@ -4,7 +4,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
     Method,
 };
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::sync::RwLock;
 
 use crate::TokenLock;
