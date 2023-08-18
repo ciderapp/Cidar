@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use log::*;
 use surrealdb::{engine::remote::ws::Ws, opt::auth::Root};
 
 use crate::Store;
@@ -38,7 +39,7 @@ pub async fn increment_conversion() {
         .update(("stats", "conversions"))
         .content(read_store)
         .await
-        .unwrap_or_else(|_| eprintln!("Failed to update conversions"));
+        .unwrap_or_else(|_| error!("Failed to update conversions"));
 }
 
 async fn create_conversion_counter() -> Store {
@@ -60,7 +61,7 @@ pub async fn connect_to_db() {
     let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
     let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
 
-    println!("Connecting to SurrealDB @ {}", database_ip);
+    info!("Connecting to SurrealDB @ {}", database_ip);
 
     crate::DB.connect::<Ws>(database_ip)
         .await

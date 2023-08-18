@@ -18,6 +18,8 @@ use regex::Regex;
 use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;
 
+use log::*;
+
 mod api;
 mod commands;
 mod updater;
@@ -48,7 +50,7 @@ struct EmbedInformation {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected", ready.user.name);
+        info!("{} is connected", ready.user.name);
         tokio::task::spawn(updater::status_updater(ctx.clone()));
 
         // Setup commands
@@ -88,7 +90,7 @@ impl EventHandler for Handler {
                 .edit_original_interaction_response(&ctx.http, |response| response.content(content))
                 .await
             {
-                println!("Cannot respond to slash command: {why}");
+                warn!("Cannot respond to slash command: {why}");
             }
         }
     }
@@ -135,14 +137,14 @@ impl EventHandler for Handler {
                     .get(format!("https://api.song.link/v1-alpha.1/links?url={url}"))
                     .send()
                     .await else {
-                        eprintln!("failed to send request to song.link api");
+                        warn!("failed to send request to song.link api");
                         return;
                     };
 
                 let Ok(serialized) = response
                     .json::<Value>()
                     .await else {
-                        eprintln!("failed to serialize response from song.link api");
+                        warn!("failed to serialize response from song.link api");
                         return;
                     };
 
@@ -159,7 +161,7 @@ impl EventHandler for Handler {
             let parsed_url = match Url::parse(&url) {
                 Ok(p) => p,
                 Err(_) => {
-                    println!("failed to parse url");
+                    warn!("failed to parse url");
                     return;
                 }
             };
@@ -187,7 +189,7 @@ impl EventHandler for Handler {
 
             // Determine what type of media it is.
             if let Some(media) = MediaType::determine(&url, &query) {
-                println!("Converting media type {:?}", &media);
+                info!("Converting media type {:?}", &media);
                 match media {
                     MediaType::Song => {
                         let id = match query.get("i") {
@@ -202,7 +204,7 @@ impl EventHandler for Handler {
                                 &format!("v1/catalog/{}/songs/{}", storefront, &id),
                             )
                             .await else {
-                                eprintln!("failed to request song {id} from the apple music api");
+                                warn!("failed to request song {id} from the apple music api");
                                 return
                             };
 
@@ -266,7 +268,7 @@ impl EventHandler for Handler {
                             &format!("v1/catalog/{}/albums/{}", storefront, id),
                         )
                         .await else {
-                            eprintln!("failed to request album {id} from the apple music api");
+                            warn!("failed to request album {id} from the apple music api");
                             return
                         };
 
@@ -336,7 +338,7 @@ impl EventHandler for Handler {
                             &format!("v1/catalog/{}/stations/{}", storefront, id),
                         )
                         .await else {
-                            eprintln!("failed to request playlists {id} from the apple music api");
+                            warn!("failed to request playlists {id} from the apple music api");
                             return
                         };
 
@@ -377,7 +379,7 @@ impl EventHandler for Handler {
                             &format!("v1/catalog/{}/playlists/{}", storefront, id),
                         )
                         .await else {
-                            eprintln!("failed to request playlists {id} from the apple music api");
+                            warn!("failed to request playlists {id} from the apple music api");
                             return
                         };
 
@@ -443,7 +445,7 @@ impl EventHandler for Handler {
                                 &format!("v1/catalog/{}/music-video/{}", storefront, id),
                             )
                             .await else {
-                                eprintln!("failed to request album {id} from the apple music api");
+                                warn!("failed to request album {id} from the apple music api");
                                 return
                             };
 
@@ -503,7 +505,7 @@ impl EventHandler for Handler {
                                 &format!("v1/catalog/{}/artists/{}", storefront, id),
                             )
                             .await else {
-                                eprintln!("failed to request artist {id} from the apple music api");
+                                warn!("failed to request artist {id} from the apple music api");
                                 return
                             };
 
@@ -628,9 +630,8 @@ impl MediaType {
                 "playlist" => Some(MediaType::Playlist),
                 "station" => Some(MediaType::Station),
                 _ => {
-                    println!("Unknown media type {}", media_type);
-                    println!("info:");
-                    println!("\turl: {}", &url);
+                    warn!("Unknown media type {}", media_type);
+                    info!("\turl: {}", &url);
                     None
                 }
             }
@@ -642,11 +643,16 @@ static DB: Surreal<Client> = Surreal::init();
 
 #[tokio::main]
 async fn main() {
-    println!("Cidar launching");
+    // Setup the logger
+    tracing_subscriber::fmt()
+        .with_env_filter("cidar=trace")
+        .init();
+
+    info!("Cidar launching");
 
     let token = std::env::var("TOKEN").expect("Please set the TOKEN env variable");
 
-    println!("Starting crash governer");
+    info!("Starting crash governer");
 
     let _guard = sentry::init(("https://15cf6882a0fd0152775f80dbbf4b1c4e@o4504730117865472.ingest.sentry.io/4505693108371456", sentry::ClientOptions {
         release: sentry::release_name!(),
@@ -685,6 +691,6 @@ async fn main() {
         .expect("Error creating client");
 
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        error!("Client error: {:?}", why);
     }
 }
