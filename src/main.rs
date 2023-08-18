@@ -186,7 +186,7 @@ impl EventHandler for Handler {
             let mut information = EmbedInformation::default();
 
             // Determine what type of media it is.
-            if let Some(media) = MediaType::determine(&url) {
+            if let Some(media) = MediaType::determine(&url, &query) {
                 println!("Converting media type {:?}", &media);
                 match media {
                     MediaType::Song => {
@@ -600,7 +600,7 @@ enum MediaType {
 }
 
 impl MediaType {
-    fn determine(url: &str) -> Option<MediaType> {
+    fn determine(url: &str, query: &HashMap<String, String>) -> Option<MediaType> {
         // https://music.apple.com/us/artist/dax/1368102340
         // We need to get the 1st index of this to properly match the strings.
         let url = match Url::parse(url) {
@@ -615,18 +615,24 @@ impl MediaType {
             None => return None,
         };
 
-        match *media_type {
-            "song" => Some(MediaType::Song),
-            "album" => Some(MediaType::Album),
-            "artist" => Some(MediaType::Artist),
-            "music-video" => Some(MediaType::MusicVideo),
-            "playlist" => Some(MediaType::Playlist),
-            "station" => Some(MediaType::Station),
-            _ => {
-                println!("Unknown media type {}", media_type);
-                println!("info:");
-                println!("\turl: {}", &url);
-                None
+        // Handle the album edge case where it MAY have a song ID.
+        if let Some(_) = query.get("i") {
+            Some(MediaType::Song)
+        } else {
+            // Do the regular paring using the url identifiers
+            match *media_type {
+                "song" => Some(MediaType::Song),
+                "album" => Some(MediaType::Album),
+                "artist" => Some(MediaType::Artist),
+                "music-video" => Some(MediaType::MusicVideo),
+                "playlist" => Some(MediaType::Playlist),
+                "station" => Some(MediaType::Station),
+                _ => {
+                    println!("Unknown media type {}", media_type);
+                    println!("info:");
+                    println!("\turl: {}", &url);
+                    None
+                }
             }
         }
     }
