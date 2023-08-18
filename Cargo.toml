@@ -1,6 +1,6 @@
 [package]
 name = "cidar"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 build = "build.rs"
 authors = ["freehelpdesk <freehelpdesk@proton.me>"]
@@ -14,7 +14,7 @@ opt-level = "z"
 
 
 [build-dependencies]
-vergen = { version = "8.2.4", features = ["build", "cargo", "git", "gitcl", "rustc", "si"] }
+vergen = { version = "8.2.4", features = ["build", "cargo", "git", "gitoxide", "rustc", "si"] }
 
 [dependencies]
 regex = "1.8.4"

@@ -17,13 +17,13 @@ pub fn run(_options: &[CommandDataOption]) -> String {
         "Version: {}
 Author(s): {}
 Build time: {}
-Commit hash: {}
+Commit hash: [{hash}](https://github.com/ciderapp/Cidar/commit/{hash})
 Rust version: {}",
         option_env!("CARGO_PKG_VERSION").na(),
         split_authors(&option_env!("CARGO_PKG_AUTHORS").na()),
         option_env!("VERGEN_BUILD_TIMESTAMP").na(),
-        option_env!("VERGEN_GIT_SHA").na(),
-        option_env!("VERGEN_RUSTC_SEMVER").na()
+        option_env!("VERGEN_RUSTC_SEMVER").na(),
+        hash=option_env!("VERGEN_GIT_SHA").na()
     )
 }
 
