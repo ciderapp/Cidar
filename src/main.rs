@@ -15,9 +15,10 @@ use serenity::model::Timestamp;
 use serenity::prelude::*;
 
 use regex::Regex;
-use surrealdb::engine::remote::ws::{Client, Ws};
-use surrealdb::opt::auth::Root;
+use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;
+
+use log::*;
 
 mod api;
 mod commands;
@@ -28,6 +29,7 @@ mod vpath;
 use vpath::ValuePath;
 
 type TokenLock = Arc<RwLock<Option<String>>>;
+const DEBUG_CHANNEL: u64 = 1133927653074796555;
 
 struct Handler {
     client: Arc<RwLock<reqwest::Client>>,
@@ -49,7 +51,7 @@ struct EmbedInformation {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected", ready.user.name);
+        info!("{} is connected", ready.user.name);
         tokio::task::spawn(updater::status_updater(ctx.clone()));
 
         // Setup commands
@@ -66,15 +68,25 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            //let Rc<RefCell<>>
+            // Only allow the debug channel in debug mode.
+            #[cfg(debug_assertions)]
+            if command.channel_id.0 != DEBUG_CHANNEL {
+                return;
+            }
+
+            // In release builds, make sure to exclude the debug channel.
+            #[cfg(not(debug_assertions))]
+            if command.channel_id.0 == DEBUG_CHANNEL {
+                return;
+            }
+
             let _ = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
                         .kind(InteractionResponseType::ChannelMessageWithSource)
                         .interaction_response_data(|message| message.content("processing..."))
                 })
-                .await
-                .unwrap();
+                .await;
 
             let content = match command.data.name.as_str() {
                 "about" => commands::about::run(&command.data.options),
@@ -90,14 +102,12 @@ impl EventHandler for Handler {
                 .edit_original_interaction_response(&ctx.http, |response| response.content(content))
                 .await
             {
-                println!("Cannot respond to slash command: {why}");
+                warn!("Cannot respond to slash command: {why}");
             }
         }
     }
 
     async fn message(&self, ctx: serenity::prelude::Context, mut new_message: Message) {
-        const DEBUG_CHANNEL: u64 = 1133927653074796555;
-
         // Only allow the debug channel in debug mode.
         #[cfg(debug_assertions)]
         if new_message.channel_id.0 != DEBUG_CHANNEL {
@@ -137,14 +147,14 @@ impl EventHandler for Handler {
                     .get(format!("https://api.song.link/v1-alpha.1/links?url={url}"))
                     .send()
                     .await else {
-                        eprintln!("failed to send request to song.link api");
+                        warn!("failed to send request to song.link api");
                         return;
                     };
 
                 let Ok(serialized) = response
                     .json::<Value>()
                     .await else {
-                        eprintln!("failed to serialize response from song.link api");
+                        warn!("failed to serialize response from song.link api");
                         return;
                     };
 
@@ -161,7 +171,7 @@ impl EventHandler for Handler {
             let parsed_url = match Url::parse(&url) {
                 Ok(p) => p,
                 Err(_) => {
-                    println!("failed to parse url");
+                    warn!("failed to parse url");
                     return;
                 }
             };
@@ -188,8 +198,8 @@ impl EventHandler for Handler {
             let mut information = EmbedInformation::default();
 
             // Determine what type of media it is.
-            if let Some(media) = MediaType::determine(&url) {
-                println!("Converting media type {:?}", &media);
+            if let Some(media) = MediaType::determine(&url, &query) {
+                info!("Converting media type {:?}", &media);
                 match media {
                     MediaType::Song => {
                         let id = match query.get("i") {
@@ -204,7 +214,7 @@ impl EventHandler for Handler {
                                 &format!("v1/catalog/{}/songs/{}", storefront, &id),
                             )
                             .await else {
-                                eprintln!("failed to request song {id} from the apple music api");
+                                warn!("failed to request song {id} from the apple music api");
                                 return
                             };
 
@@ -268,7 +278,7 @@ impl EventHandler for Handler {
                             &format!("v1/catalog/{}/albums/{}", storefront, id),
                         )
                         .await else {
-                            eprintln!("failed to request album {id} from the apple music api");
+                            warn!("failed to request album {id} from the apple music api");
                             return
                         };
 
@@ -338,7 +348,7 @@ impl EventHandler for Handler {
                             &format!("v1/catalog/{}/stations/{}", storefront, id),
                         )
                         .await else {
-                            eprintln!("failed to request playlists {id} from the apple music api");
+                            warn!("failed to request playlists {id} from the apple music api");
                             return
                         };
 
@@ -379,7 +389,7 @@ impl EventHandler for Handler {
                             &format!("v1/catalog/{}/playlists/{}", storefront, id),
                         )
                         .await else {
-                            eprintln!("failed to request playlists {id} from the apple music api");
+                            warn!("failed to request playlists {id} from the apple music api");
                             return
                         };
 
@@ -445,7 +455,7 @@ impl EventHandler for Handler {
                                 &format!("v1/catalog/{}/music-video/{}", storefront, id),
                             )
                             .await else {
-                                eprintln!("failed to request album {id} from the apple music api");
+                                warn!("failed to request album {id} from the apple music api");
                                 return
                             };
 
@@ -505,7 +515,7 @@ impl EventHandler for Handler {
                                 &format!("v1/catalog/{}/artists/{}", storefront, id),
                             )
                             .await else {
-                                eprintln!("failed to request artist {id} from the apple music api");
+                                warn!("failed to request artist {id} from the apple music api");
                                 return
                             };
 
@@ -602,7 +612,7 @@ enum MediaType {
 }
 
 impl MediaType {
-    fn determine(url: &str) -> Option<MediaType> {
+    fn determine(url: &str, query: &HashMap<String, String>) -> Option<MediaType> {
         // https://music.apple.com/us/artist/dax/1368102340
         // We need to get the 1st index of this to properly match the strings.
         let url = match Url::parse(url) {
@@ -617,18 +627,23 @@ impl MediaType {
             None => return None,
         };
 
-        match *media_type {
-            "song" => Some(MediaType::Song),
-            "album" => Some(MediaType::Album),
-            "artist" => Some(MediaType::Artist),
-            "music-video" => Some(MediaType::MusicVideo),
-            "playlist" => Some(MediaType::Playlist),
-            "station" => Some(MediaType::Station),
-            _ => {
-                println!("Unknown media type {}", media_type);
-                println!("info:");
-                println!("\turl: {}", &url);
-                None
+        // Handle the album edge case where it MAY have a song ID.
+        if let Some(_) = query.get("i") {
+            Some(MediaType::Song)
+        } else {
+            // Do the regular paring using the url identifiers
+            match *media_type {
+                "song" => Some(MediaType::Song),
+                "album" => Some(MediaType::Album),
+                "artist" => Some(MediaType::Artist),
+                "music-video" => Some(MediaType::MusicVideo),
+                "playlist" => Some(MediaType::Playlist),
+                "station" => Some(MediaType::Station),
+                _ => {
+                    warn!("Unknown media type {}", media_type);
+                    info!("\turl: {}", &url);
+                    None
+                }
             }
         }
     }
@@ -638,31 +653,23 @@ static DB: Surreal<Client> = Surreal::init();
 
 #[tokio::main]
 async fn main() {
-    println!("Cidar launching");
+    // Setup the logger
+    tracing_subscriber::fmt()
+        .with_env_filter("cidar=trace")
+        .init();
+
+    info!("Cidar launching");
 
     let token = std::env::var("TOKEN").expect("Please set the TOKEN env variable");
-    let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
-    let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
 
-    println!("Starting crash governer");
+    info!("Starting crash governer");
 
     let _guard = sentry::init(("https://15cf6882a0fd0152775f80dbbf4b1c4e@o4504730117865472.ingest.sentry.io/4505693108371456", sentry::ClientOptions {
         release: sentry::release_name!(),
         ..Default::default()
     }));
 
-    println!("Connecting to SurrealDB @ {}", database_ip);
-    DB.connect::<Ws>(database_ip)
-        .await
-        .expect("Unable to connect to database");
-    DB.signin(Root {
-        username: "root",
-        password: &database_password,
-    })
-    .await
-    .unwrap();
-
-    DB.use_ns("cider").use_db("cidar").await.unwrap();
+    util::connect_to_db().await;
 
     let developer_token: TokenLock = Default::default(); // We need this smart pointer to give to the thread that handles token updates
 
@@ -694,6 +701,6 @@ async fn main() {
         .expect("Error creating client");
 
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        error!("Client error: {:?}", why);
     }
 }
