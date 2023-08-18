@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use surrealdb::{engine::remote::ws::Ws, opt::auth::Root};
+
 use crate::Store;
 
 pub fn milli_to_hhmmss(duration: &Duration) -> String {
@@ -52,4 +54,23 @@ async fn create_conversion_counter() -> Store {
 
 pub fn split_authors(authors: &str) -> String {
     authors.split(':').collect::<Vec<&str>>().join(", ")
+}
+
+pub async fn connect_to_db() {
+    let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
+    let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
+
+    println!("Connecting to SurrealDB @ {}", database_ip);
+
+    crate::DB.connect::<Ws>(database_ip)
+        .await
+        .expect("Unable to connect to database");
+    crate::DB.signin(Root {
+        username: "root",
+        password: &database_password,
+    })
+    .await
+    .unwrap();
+
+    crate::DB.use_ns("cider").use_db("cidar").await.unwrap();
 }

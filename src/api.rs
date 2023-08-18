@@ -30,15 +30,6 @@ impl AppleMusicApi {
             ))
             .send()
             .await?;
-
-        // let txt = req.text().await.unwrap();
-
-        // Ok(serde_json::from_str::<Value>(&txt).unwrap())
-
-        //println!("{:#?}", req.headers());
-        //println!("{:#?}", req.text().await);
-
-        //this function works on hope alone
         req.json().await
     }
 

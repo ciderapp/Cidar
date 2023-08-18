@@ -15,8 +15,7 @@ use serenity::model::Timestamp;
 use serenity::prelude::*;
 
 use regex::Regex;
-use surrealdb::engine::remote::ws::{Client, Ws};
-use surrealdb::opt::auth::Root;
+use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;
 
 mod api;
@@ -73,8 +72,7 @@ impl EventHandler for Handler {
                         .kind(InteractionResponseType::ChannelMessageWithSource)
                         .interaction_response_data(|message| message.content("processing..."))
                 })
-                .await
-                .unwrap();
+                .await;
 
             let content = match command.data.name.as_str() {
                 "about" => commands::about::run(&command.data.options),
@@ -641,8 +639,6 @@ async fn main() {
     println!("Cidar launching");
 
     let token = std::env::var("TOKEN").expect("Please set the TOKEN env variable");
-    let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
-    let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
 
     println!("Starting crash governer");
 
@@ -651,18 +647,7 @@ async fn main() {
         ..Default::default()
     }));
 
-    println!("Connecting to SurrealDB @ {}", database_ip);
-    DB.connect::<Ws>(database_ip)
-        .await
-        .expect("Unable to connect to database");
-    DB.signin(Root {
-        username: "root",
-        password: &database_password,
-    })
-    .await
-    .unwrap();
-
-    DB.use_ns("cider").use_db("cidar").await.unwrap();
+    util::connect_to_db().await;
 
     let developer_token: TokenLock = Default::default(); // We need this smart pointer to give to the thread that handles token updates
 
