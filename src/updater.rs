@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serenity::model::gateway::Activity;
 use serenity::model::user::OnlineStatus;
 
-use crate::{Store, TokenLock, util};
+use crate::{util, Store, TokenLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenBody {
@@ -21,17 +21,16 @@ pub async fn token_updater(token: TokenLock) {
             .header("User-Agent", "Cider")
             .header("Referer", "tauri.localhost")
             .send()
-            .await else {
-                error!("Failed to get new token, keeping previous");
-                return
-            };
+            .await
+        else {
+            error!("Failed to get new token, keeping previous");
+            return;
+        };
 
-        let Ok(serialized) = response
-            .json::<TokenBody>()
-            .await else {
-                error!("Failed to get new token, keeping previous");
-                return
-            };
+        let Ok(serialized) = response.json::<TokenBody>().await else {
+            error!("Failed to get new token, keeping previous");
+            return;
+        };
 
         *token.write().await = Some(serialized.token);
 
@@ -51,14 +50,19 @@ pub async fn status_updater(ctx: serenity::prelude::Context) {
             break;
         }
 
-        let read_store: Store = crate::DB
-            .select(("stats", "conversions"))
-            .await
-            .unwrap_or(Store::default());
+        let Ok(read_store) = crate::DB
+            .select::<Option<Store>>(("stats", "conversions"))
+            .await else {
+                error!("Unable to read total conversions from the database. This can mean our connection has been severed.");
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                continue;
+            };
+
         let activity = Activity::listening(format!(
             "Cider | {} songs converted",
             read_store.total_conversions
         ));
+        
         ctx.set_presence(Some(activity.clone()), status).await;
         tokio::time::sleep(Duration::from_secs(10)).await;
     }
