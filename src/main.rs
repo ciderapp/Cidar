@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
-use reqwest::{Method, Url};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serenity::async_trait;
@@ -22,6 +21,7 @@ use log::*;
 
 mod api;
 mod commands;
+mod conversion;
 mod updater;
 mod util;
 mod vpath;
@@ -37,15 +37,6 @@ struct Handler {
     url_regex: Regex,
     apple_regex: Regex,
     spotify_regex: Regex,
-}
-
-#[derive(Debug, Default)]
-struct EmbedInformation {
-    title: String,
-    description: String,
-    footer: String,
-    artwork: String,
-    url: String,
 }
 
 #[async_trait]
@@ -146,21 +137,22 @@ impl EventHandler for Handler {
                     .await
                     .get(format!("https://api.song.link/v1-alpha.1/links?url={url}"))
                     .send()
-                    .await else {
-                        warn!("failed to send request to song.link api");
-                        return;
-                    };
+                    .await
+                else {
+                    warn!("failed to send request to song.link api");
+                    return;
+                };
 
-                let Ok(serialized) = response
-                    .json::<Value>()
-                    .await else {
-                        warn!("failed to serialize response from song.link api");
-                        return;
-                    };
+                let Ok(serialized) = response.json::<Value>().await else {
+                    warn!("failed to serialize response from song.link api");
+                    return;
+                };
 
-                let amurl = serialized
-                    .get_value_by_path("linksByPlatform.appleMusic.url")
-                    .unwrap();
+                let Some(amurl) = serialized.get_value_by_path("linksByPlatform.appleMusic.url")
+                else {
+                    warn!("failed to get apple music link from song.link");
+                    return;
+                };
 
                 url = match amurl.as_str() {
                     Some(url) => url.to_string(),
@@ -168,12 +160,9 @@ impl EventHandler for Handler {
                 };
             }
 
-            let parsed_url = match Url::parse(&url) {
-                Ok(p) => p,
-                Err(_) => {
-                    warn!("failed to parse url");
-                    return;
-                }
+            let Ok(parsed_url) = Url::parse(&url) else {
+                warn!("failed to parse url");
+                return;
             };
 
             let mut query: HashMap<String, String> = HashMap::new();
@@ -186,379 +175,31 @@ impl EventHandler for Handler {
 
             let longer = url.replace("https://", "");
 
-            let storefront: Vec<&str> = longer.split('/').collect();
-            let storefront = match storefront.get(1) {
-                Some(sf) => sf,
-                None => {
-                    return;
-                }
+            let items = longer.split('/').collect::<Vec<&str>>();
+            let Some(storefront) = items.get(1) else {
+                warn!("Unable to obtain storefront from URL");
+                return;
             };
 
-            // Create a place to store embed information for all of the follwing cases.
-            let mut information = EmbedInformation::default();
-
-            // Determine what type of media it is.
-            if let Some(media) = MediaType::determine(&url, &query) {
-                info!("Converting media type {:?}", &media);
-                match media {
-                    MediaType::Song => {
-                        let id = match query.get("i") {
-                            Some(i) => i,
-                            None => parsed_url.path_segments().unwrap().last().unwrap(),
-                        };
-
-                        let Ok(resp) = self
-                            .api
-                            .request_endpoint(
-                                Method::GET,
-                                &format!("v1/catalog/{}/songs/{}", storefront, &id),
-                            )
-                            .await else {
-                                warn!("failed to request song {id} from the apple music api");
-                                return
-                            };
-
-                        // return useless values instead of panicking
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
-                        information.description = format!(
-                            "Listen to {} by {} on Cider",
-                            resp.get_value_by_path("data.0.attributes.albumName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A"),
-                            resp.get_value_by_path("data.0.attributes.artistName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
-                        );
-
-                        information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        );
-
-                        information.footer = format!(
-                            "Shared by {} | {} • {}",
-                            new_message.author.name,
-                            util::milli_to_hhmmss(&Duration::from_millis(
-                                resp.get_value_by_path("data.0.attributes.durationInMillis")
-                                    .unwrap()
-                                    .as_u64()
-                                    .unwrap_or(0),
-                            )),
-                            resp.get_value_by_path("data.0.attributes.releaseDate")
-                                .unwrap_or(Value::String("".to_string()))
-                                .as_str()
-                                .unwrap()
-                        )
-                    }
-                    MediaType::Album => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
-                        let Ok(resp) = self
-                            .api
-                            .request_endpoint(
-                            Method::GET,
-                            &format!("v1/catalog/{}/albums/{}", storefront, id),
-                        )
-                        .await else {
-                            warn!("failed to request album {id} from the apple music api");
-                            return
-                        };
-
-                        let mut total_duration: u64 = 0;
-
-                        for i in 0..resp
-                            .get_vec_len_by_path("data.0.relationships.tracks.data")
-                            .unwrap()
-                        {
-                            total_duration += resp
-                                .get_value_by_path(&format!(
-                                "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
-                                ))
-                                .unwrap()
-                                .as_u64()
-                                .unwrap_or(0);
-                        }
-
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
-                        information.description = format!(
-                            "Listen to {} by {} on Cider",
-                            &information.title,
-                            resp.get_value_by_path("data.0.attributes.artistName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
-                        );
-
-                        information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        );
-
-                        information.footer = format!(
-                            "Shared by {} | {} • {}",
-                            new_message.author.name,
-                            util::milli_to_hhmmss(&Duration::from_millis(total_duration)),
-                            resp.get_value_by_path("data.0.attributes.releaseDate")
-                                .unwrap_or(Value::String("".to_string()))
-                                .as_str()
-                                .unwrap()
-                        )
-                    }
-                    MediaType::Station => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
-                        let Ok(resp) = self
-                            .api
-                            .request_endpoint(
-                            Method::GET,
-                            &format!("v1/catalog/{}/stations/{}", storefront, id),
-                        )
-                        .await else {
-                            warn!("failed to request playlists {id} from the apple music api");
-                            return
-                        };
-
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
-                        information.description =
-                            format!("Tune into {} on Cider", &information.title);
-
-                        information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        );
-
-                        information.footer = format!("Shared by {}", new_message.author.name)
-                    }
-                    MediaType::Playlist => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
-                        let Ok(resp) = self
-                            .api
-                            .request_endpoint(
-                            Method::GET,
-                            &format!("v1/catalog/{}/playlists/{}", storefront, id),
-                        )
-                        .await else {
-                            warn!("failed to request playlists {id} from the apple music api");
-                            return
-                        };
-
-                        let mut total_duration: u64 = 0;
-
-                        for i in 0..resp
-                            .get_vec_len_by_path("data.0.relationships.tracks.data")
-                            .unwrap()
-                        {
-                            total_duration += resp
-                                .get_value_by_path(&format!(
-                                "data.0.relationships.tracks.data.{i}.attributes.durationInMillis"
-                                ))
-                                .unwrap()
-                                .as_u64()
-                                .unwrap_or(0);
-                        }
-
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
-                        information.description = format!(
-                            "Listen to {} by {} on Cider",
-                            &information.title,
-                            resp.get_value_by_path("data.0.attributes.curatorName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
-                        );
-
-                        information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        );
-
-                        information.footer = format!(
-                            "Shared by {} | {}",
-                            new_message.author.name,
-                            util::milli_to_hhmmss(&Duration::from_millis(total_duration)),
-                        )
-                    }
-                    MediaType::MusicVideo => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
-                        let Ok(resp) = self
-                            .api
-                            .request_endpoint(
-                                Method::GET,
-                                &format!("v1/catalog/{}/music-video/{}", storefront, id),
-                            )
-                            .await else {
-                                warn!("failed to request album {id} from the apple music api");
-                                return
-                            };
-
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
-                        information.description = format!(
-                            "Listen to {} by {} on Cider",
-                            &information.title,
-                            resp.get_value_by_path("data.0.attributes.artistName")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or("N/A")
-                        );
-
-                        information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        );
-
-                        information.footer = format!(
-                            "Shared by {} | {} • {}",
-                            new_message.author.name,
-                            util::milli_to_hhmmss(&Duration::from_millis(
-                                resp.get_value_by_path("data.0.attributes.durationInMillis")
-                                    .unwrap()
-                                    .as_u64()
-                                    .unwrap_or(0),
-                            )),
-                            resp.get_value_by_path("data.0.attributes.releaseDate")
-                                .unwrap_or(Value::String("".to_string()))
-                                .as_str()
-                                .unwrap()
-                        )
-                    }
-                    MediaType::Artist => {
-                        let id = parsed_url.path_segments().unwrap().last().unwrap();
-                        let Ok(resp) = self
-                            .api
-                            .request_endpoint(
-                                Method::GET,
-                                &format!("v1/catalog/{}/artists/{}", storefront, id),
-                            )
-                            .await else {
-                                warn!("failed to request artist {id} from the apple music api");
-                                return
-                            };
-
-                        information.title = resp
-                            .get_value_by_path("data.0.attributes.name")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("N/A")
-                            .to_string();
-
-                        information.url = resp
-                            .get_value_by_path("data.0.attributes.url")
-                            .unwrap()
-                            .as_str()
-                            .unwrap_or("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-                            .to_string();
-
-                        information.description =
-                            format!("Listen to {} on Cider", &information.title);
-
-                        information.artwork = util::wh(
-                            resp.get_value_by_path("data.0.attributes.artwork.url")
-                                .unwrap()
-                                .as_str()
-                                .unwrap_or(""),
-                            512,
-                            512,
-                        );
-
-                        information.footer = format!("Shared by {}", new_message.author.name)
-                    }
-                }
-            } else {
-                // We dont support whatever they are trying to convert, so bail out.
+            let Some(information) = conversion::get_information(
+                &self.api,
+                &parsed_url,
+                storefront,
+                &query,
+                &new_message,
+            )
+            .await
+            else {
+                warn!("Unable to obtain informaiton for the embed");
                 return;
-            }
+            };
 
             let modded = url.replace("https://", "");
 
             let play_link = format!("https://cider.sh/p?{}", modded);
             let view_link = format!("https://cider.sh/o?{}", modded);
 
-            new_message
+            let Ok(_) = new_message
                 .channel_id
                 .send_message(&ctx.http, |m| {
                     m.embed(|e| {
@@ -585,9 +226,13 @@ impl EventHandler for Handler {
                     })
                 })
                 .await
-                .unwrap();
+            else {
+                error!("Unable to send message, ");
+                return;
+            };
 
-            new_message.suppress_embeds(&ctx.http).await.unwrap();
+            // Is not that important, can fail.
+            let _ = new_message.suppress_embeds(&ctx.http).await;
 
             // Update the conversions
             util::increment_conversion().await;
@@ -598,55 +243,6 @@ impl EventHandler for Handler {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Store {
     total_conversions: u64,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-enum MediaType {
-    #[default]
-    Song,
-    Album,
-    Playlist,
-    MusicVideo,
-    Station,
-    Artist,
-}
-
-impl MediaType {
-    fn determine(url: &str, query: &HashMap<String, String>) -> Option<MediaType> {
-        // https://music.apple.com/us/artist/dax/1368102340
-        // We need to get the 1st index of this to properly match the strings.
-        let url = match Url::parse(url) {
-            Ok(u) => u,
-            Err(_) => return None,
-        };
-
-        let segments = url.path_segments().unwrap().collect::<Vec<&str>>();
-
-        let media_type = match segments.get(1) {
-            Some(t) => t,
-            None => return None,
-        };
-
-        // Handle the album edge case where it MAY have a song ID.
-        if let Some(_) = query.get("i") {
-            Some(MediaType::Song)
-        } else {
-            // Do the regular paring using the url identifiers
-            match *media_type {
-                "song" => Some(MediaType::Song),
-                "album" => Some(MediaType::Album),
-                "artist" => Some(MediaType::Artist),
-                "music-video" => Some(MediaType::MusicVideo),
-                "playlist" => Some(MediaType::Playlist),
-                "station" => Some(MediaType::Station),
-                _ => {
-                    warn!("Unknown media type {}", media_type);
-                    info!("\turl: {}", &url);
-                    None
-                }
-            }
-        }
-    }
 }
 
 static DB: Surreal<Client> = Surreal::init();

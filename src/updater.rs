@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serenity::model::gateway::Activity;
 use serenity::model::user::OnlineStatus;
 
-use crate::{Store, TokenLock, util};
+use crate::{util, Store, TokenLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenBody {
@@ -21,17 +21,16 @@ pub async fn token_updater(token: TokenLock) {
             .header("User-Agent", "Cider")
             .header("Referer", "tauri.localhost")
             .send()
-            .await else {
-                error!("Failed to get new token, keeping previous");
-                return
-            };
+            .await
+        else {
+            error!("Failed to get new token, keeping previous");
+            return;
+        };
 
-        let Ok(serialized) = response
-            .json::<TokenBody>()
-            .await else {
-                error!("Failed to get new token, keeping previous");
-                return
-            };
+        let Ok(serialized) = response.json::<TokenBody>().await else {
+            error!("Failed to get new token, keeping previous");
+            return;
+        };
 
         *token.write().await = Some(serialized.token);
 

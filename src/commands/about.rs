@@ -23,7 +23,7 @@ Rust version: {}",
         split_authors(&option_env!("CARGO_PKG_AUTHORS").na()),
         option_env!("VERGEN_BUILD_TIMESTAMP").na(),
         option_env!("VERGEN_RUSTC_SEMVER").na(),
-        hash=option_env!("VERGEN_GIT_SHA").na()
+        hash = option_env!("VERGEN_GIT_SHA").na()
     )
 }
 

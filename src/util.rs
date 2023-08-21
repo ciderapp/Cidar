@@ -46,9 +46,10 @@ async fn create_conversion_counter() -> Store {
     let Ok(s) = crate::DB
         .create(("stats", "conversions"))
         .content(Store::default())
-        .await else {
-            panic!("Failed to create conversions store")
-        };
+        .await
+    else {
+        panic!("Failed to create conversions store")
+    };
 
     s
 }
@@ -63,15 +64,17 @@ pub async fn connect_to_db() {
 
     info!("Connecting to SurrealDB @ {}", database_ip);
 
-    crate::DB.connect::<Ws>(database_ip)
+    crate::DB
+        .connect::<Ws>(database_ip)
         .await
         .expect("Unable to connect to database");
-    crate::DB.signin(Root {
-        username: "root",
-        password: &database_password,
-    })
-    .await
-    .unwrap();
+    crate::DB
+        .signin(Root {
+            username: "root",
+            password: &database_password,
+        })
+        .await
+        .unwrap();
 
     crate::DB.use_ns("cider").use_db("cidar").await.unwrap();
 }
