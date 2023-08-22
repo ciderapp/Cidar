@@ -1,9 +1,10 @@
-use std::time::Duration;
+use std::{net::TcpStream, sync::Arc, time::Duration};
 
 use log::*;
-use surrealdb::{engine::remote::ws::Ws, opt::auth::Root};
+use surrealdb::{engine::remote::ws::Ws, opt::auth::Root, Error};
+use tokio::sync::RwLock;
 
-use crate::Store;
+use crate::{Store, DATABASE_IP, DATABASE_PASSWORD};
 
 pub fn milli_to_hhmmss(duration: &Duration) -> String {
     let millis = duration.as_millis();
@@ -27,19 +28,65 @@ pub fn wh(url: &str, w: u32, h: u32) -> String {
         .replace("{h}", &format!("{}", h))
 }
 
-pub async fn increment_conversion() {
-    let mut read_store: Store = match crate::DB.select(("stats", "conversions")).await {
-        Ok(s) => s,
-        Err(_) => create_conversion_counter().await,
-    };
+/// Conversion cache type for when we cannot send events to the database.
+pub type Cache = Arc<RwLock<Option<Store>>>;
 
+pub async fn increment_conversion(cache: Cache) {
+    if cache.read().await.is_none() {
+        // Create the cache
+        info!("Creating cache for total conversions");
+        if !db_online().await {
+            warn!("Unable to create cache due to lack of server connectivity");
+            return;
+        }
+    }
+
+    if db_online().await {
+        let read_store: Store = match crate::DB.select(("stats", "conversions")).await {
+            Ok(s) => s,
+            Err(_) => {
+                info!("Creating counter in DB");
+                create_conversion_counter().await
+            }
+        };
+
+        // Determine which one to use.
+        if cache.read().await.is_some()
+            && read_store.total_conversions < cache.read().await.unwrap().total_conversions
+        {
+            // Write the highest value to cache
+
+            info!(
+                "Overriding db value with that in cache {} -> {}",
+                read_store.total_conversions,
+                cache.read().await.unwrap().total_conversions
+            );
+
+            let read_store = cache.read().await.unwrap();
+            *cache.write().await = Some(read_store);
+        } else {
+            // Always write to cache, because that is what we will use for calculations
+            *cache.write().await = Some(read_store);
+        }
+    }
+
+    // Read the cache again, increment, then save back to the cache
+    let mut read_store = cache.read().await.unwrap();
     read_store.total_conversions += 1;
+    *cache.write().await = Some(read_store);
 
-    crate::DB
+    let conversion = cache.read().await.unwrap().total_conversions;
+    trace!("total conversions = {}", conversion);
+    drop(cache);
+
+    let s: Result<Store, Error> = crate::DB
         .update(("stats", "conversions"))
         .content(read_store)
-        .await
-        .unwrap_or_else(|_| error!("Failed to update conversions"));
+        .await;
+
+    if s.is_err() {
+        error!("Unable to update conversions in the database, storing locally in cache.");
+    }
 }
 
 async fn create_conversion_counter() -> Store {
@@ -48,9 +95,9 @@ async fn create_conversion_counter() -> Store {
         .content(Store::default())
         .await
     else {
-        panic!("Failed to create conversions store")
+        warn!("Failed to create conversion source. most likely made already");
+        return Store::default();
     };
-
     s
 }
 
@@ -58,23 +105,22 @@ pub fn split_authors(authors: &str) -> String {
     authors.split(':').collect::<Vec<&str>>().join(", ")
 }
 
-pub async fn connect_to_db() {
-    let database_ip = std::env::var("DB_IP").expect("Please set the DB_IP env variable");
-    let database_password = std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
-
-    info!("Connecting to SurrealDB @ {}", database_ip);
-
-    crate::DB
-        .connect::<Ws>(database_ip)
-        .await
-        .expect("Unable to connect to database");
+pub async fn connect_to_db() -> Result<(), Error> {
+    crate::DB.connect::<Ws>(DATABASE_IP.as_str()).await?;
     crate::DB
         .signin(Root {
             username: "root",
-            password: &database_password,
+            password: &DATABASE_PASSWORD,
         })
-        .await
-        .unwrap();
+        .await?;
 
-    crate::DB.use_ns("cider").use_db("cidar").await.unwrap();
+    crate::DB.use_ns("cider").use_db("cidar").await?;
+    Ok(())
+}
+
+pub async fn db_online() -> bool {
+    TcpStream::connect_timeout(
+        &DATABASE_IP.as_str().parse().unwrap(),
+        Duration::from_millis(500),
+    ).is_ok()
 }

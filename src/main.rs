@@ -28,12 +28,15 @@ mod vpath;
 
 use vpath::ValuePath;
 
+use crate::util::Cache;
+
 type TokenLock = Arc<RwLock<Option<String>>>;
 const DEBUG_CHANNEL: u64 = 1133927653074796555;
 
 struct Handler {
     client: Arc<RwLock<reqwest::Client>>,
     api: api::AppleMusicApi,
+    cache: Cache,
     url_regex: Regex,
     apple_regex: Regex,
     spotify_regex: Regex,
@@ -81,11 +84,14 @@ impl EventHandler for Handler {
 
             let content = match command.data.name.as_str() {
                 "about" => commands::about::run(&command.data.options),
-                "convert" => {
-                    commands::convert::run(&command.data.options, &self.api, &self.url_regex)
-                        .await
-                        .unwrap_or_else(|err| err.to_string())
-                }
+                "convert" => commands::convert::run(
+                    &command.data.options,
+                    &self.api,
+                    &self.url_regex,
+                    &self.cache,
+                )
+                .await
+                .unwrap_or_else(|err| err.to_string()),
                 _ => "not implemented".to_string(),
             };
 
@@ -235,23 +241,36 @@ impl EventHandler for Handler {
             let _ = new_message.suppress_embeds(&ctx.http).await;
 
             // Update the conversions
-            util::increment_conversion().await;
+            util::increment_conversion(self.cache.clone()).await;
         }
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct Store {
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
+pub struct Store {
     total_conversions: u64,
 }
 
 static DB: Surreal<Client> = Surreal::init();
+
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    pub static ref DATABASE_IP: String =
+        std::env::var("DB_IP").expect("Please set the DB_IP env variable");
+    pub static ref DATABASE_PASSWORD: String =
+        std::env::var("DB_PASS").expect("Please set the DB_PASS env variable");
+}
 
 #[tokio::main]
 async fn main() {
     // Setup the logger
     tracing_subscriber::fmt()
         .with_env_filter("cidar=trace")
+        .with_thread_names(false)
+        .with_line_number(true)
+        .with_file(true)
         .init();
 
     info!("Cidar launching");
@@ -265,7 +284,8 @@ async fn main() {
         ..Default::default()
     }));
 
-    util::connect_to_db().await;
+    info!("Connecting to SurrealDB @ {}", &*DATABASE_IP);
+    let _ = util::connect_to_db().await;
 
     let developer_token: TokenLock = Default::default(); // We need this smart pointer to give to the thread that handles token updates
 
@@ -288,6 +308,7 @@ async fn main() {
         url_regex: Regex::new(r"(?:(?:https?|ftp)://)?[\w/\-?=%.]+\.[\w/\-&?=%.]+").unwrap(),
         apple_regex: Regex::new(r"music.apple.com/(.+[a-z](/?)+)").unwrap(),
         spotify_regex: Regex::new(r"open.spotify.com/(.+[a-z](/?)+)").unwrap(),
+        cache: Cache::default(),
     };
 
     let mut client = serenity::Client::builder(token, intents)

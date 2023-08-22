@@ -8,6 +8,7 @@ use serenity::{
     builder::CreateApplicationCommand, model::prelude::application_command::CommandDataOptionValue,
 };
 
+use crate::util::Cache;
 use crate::{api::AppleMusicApi, util, ValuePath};
 
 #[derive(Error, Debug)]
@@ -34,6 +35,7 @@ pub async fn run(
     _options: &[CommandDataOption],
     token: &AppleMusicApi,
     regex: &Regex,
+    cache: &Cache,
 ) -> Result<String, ConvertError> {
     let opt = match _options.get(0) {
         Some(o) => o.resolved.as_ref(),
@@ -61,7 +63,7 @@ pub async fn run(
         Ok(
             match response.get_value_by_path("linksByPlatform.appleMusic.url") {
                 Some(url) => {
-                    util::increment_conversion().await;
+                    util::increment_conversion(cache.clone()).await;
                     url.as_str().unwrap().to_string()
                 }
                 None => return Err(ConvertError::FailedConversion),
