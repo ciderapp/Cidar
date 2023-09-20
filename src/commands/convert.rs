@@ -54,15 +54,15 @@ pub async fn run(
             .json()
             .await?;
 
-            Ok(
-                match response.get_value_by_path("linksByPlatform.appleMusic.url") {
-                    Some(url) => {
-                        util::increment_conversion(cache.clone()).await;
-                        url.as_str().unwrap().to_string()
-                    }
-                    None => return Err(ConvertError::FailedConversion),
-                },
-            )
+            let converted = match response.get_value_by_path("linksByPlatform.appleMusic.url") {
+                Some(url) => {
+                    util::increment_conversion(cache.clone()).await;
+                    url.as_str().unwrap().to_string()
+                }
+                None => return Err(ConvertError::FailedConversion),
+            };
+    
+            Ok(converted)
     } else {
         Err(ConvertError::InvalidOption)
     }
