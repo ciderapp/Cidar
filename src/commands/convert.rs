@@ -22,13 +22,7 @@ pub enum ConvertError {
     #[error("option was not a string")]
     InvalidOption,
     #[error("request failed")]
-    RequestError(String),
-}
-
-impl From<reqwest::Error> for ConvertError {
-    fn from(value: reqwest::Error) -> Self {
-        ConvertError::RequestError(value.to_string())
-    }
+    RequestError(#[from] reqwest::Error),
 }
 
 pub async fn run(
@@ -60,15 +54,15 @@ pub async fn run(
             .json()
             .await?;
 
-        Ok(
-            match response.get_value_by_path("linksByPlatform.appleMusic.url") {
-                Some(url) => {
-                    util::increment_conversion(cache.clone()).await;
-                    url.as_str().unwrap().to_string()
-                }
-                None => return Err(ConvertError::FailedConversion),
-            },
-        )
+            Ok(
+                match response.get_value_by_path("linksByPlatform.appleMusic.url") {
+                    Some(url) => {
+                        util::increment_conversion(cache.clone()).await;
+                        url.as_str().unwrap().to_string()
+                    }
+                    None => return Err(ConvertError::FailedConversion),
+                },
+            )
     } else {
         Err(ConvertError::InvalidOption)
     }
