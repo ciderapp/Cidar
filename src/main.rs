@@ -249,7 +249,7 @@ struct Store {
     total_conversions: u64,
 }
 
-static DB: Surreal<Client> = Surreal::init();
+static DB: Lazy<Surreal<Client>> = Lazy::new(Surreal::init);
 
 #[tokio::main]
 async fn main() {
