@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serenity::model::gateway::Activity;
 use serenity::model::user::OnlineStatus;
 
-use crate::{util, Store, TokenLock};
+use crate::{util::{self, create_conversion_counter}, Store, TokenLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenBody {
@@ -50,17 +50,19 @@ pub async fn status_updater(ctx: serenity::prelude::Context) {
             break;
         }
 
-        let Ok(read_store) = crate::DB
-            .select::<Option<Store>>(("stats", "conversions"))
-            .await else {
-                error!("Unable to read total conversions from the database. This can mean our connection has been severed.");
-                tokio::time::sleep(Duration::from_secs(10)).await;
-                continue;
-            };
+        let read_store: Option<Store> = crate::DB
+            .select(("stats", "conversions"))
+            .await
+            .unwrap_or(Some(Store::default()));
+
+        if read_store.is_none() {
+            warn!("We are not able to read from the database for some reason, using defaults and trying to force creation, restart service or contact freehelpdesk@cider.sh for assistance");
+            create_conversion_counter().await;
+        }
 
         let activity = Activity::listening(format!(
             "Cider | {} songs converted",
-            read_store.total_conversions
+            read_store.unwrap_or_default().total_conversions
         ));
         
         ctx.set_presence(Some(activity.clone()), status).await;

@@ -27,22 +27,24 @@ pub fn wh(url: &str, w: u32, h: u32) -> String {
         .replace("{h}", &format!("{}", h))
 }
 
-pub async fn increment_conversion() {
-    let mut read_store: Store = match crate::DB.select(("stats", "conversions")).await {
-        Ok(s) => s,
-        Err(_) => create_conversion_counter().await,
+pub async fn increment_conversion() -> Result<(), surrealdb::Error> {
+    let mut read_store: Store = match crate::DB.select(("stats", "conversions")).await? {
+        Some(s) => s,
+        None => create_conversion_counter().await,
     };
 
+    info!("incrementing conversions; {} -> {}", read_store.total_conversions, read_store.total_conversions + 1);
     read_store.total_conversions += 1;
 
     crate::DB
-        .update(("stats", "conversions"))
+        .update::<Option<Store>>(("stats", "conversions"))
         .content(read_store)
-        .await
-        .unwrap_or_else(|_| error!("Failed to update conversions"));
+        .await?;
+
+    Ok(())
 }
 
-async fn create_conversion_counter() -> Store {
+pub async fn create_conversion_counter() -> Store {
     let Ok(s) = crate::DB
         .create(("stats", "conversions"))
         .content(Store::default())
@@ -51,7 +53,7 @@ async fn create_conversion_counter() -> Store {
         panic!("Failed to create conversions store")
     };
 
-    s
+    s.unwrap()
 }
 
 pub fn split_authors(authors: &str) -> String {
@@ -68,6 +70,7 @@ pub async fn connect_to_db() {
         .connect::<Ws>(database_ip)
         .await
         .expect("Unable to connect to database");
+
     crate::DB
         .signin(Root {
             username: "root",

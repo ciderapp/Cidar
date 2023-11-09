@@ -61,7 +61,7 @@ pub async fn run(
         Ok(
             match response.get_value_by_path("linksByPlatform.appleMusic.url") {
                 Some(url) => {
-                    util::increment_conversion().await;
+                    let _ = util::increment_conversion().await;
                     url.as_str().unwrap().to_string()
                 }
                 None => return Err(ConvertError::FailedConversion),

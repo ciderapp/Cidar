@@ -13,6 +13,8 @@ use serenity::model::prelude::{Interaction, InteractionResponseType, Message};
 use serenity::model::Timestamp;
 use serenity::prelude::*;
 
+use dotenv::dotenv;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;
@@ -127,6 +129,8 @@ impl EventHandler for Handler {
                 return;
             }
 
+            // Try to obtain an apple music link from song.link, for now this service is free
+            // in alpha. So this may change / not work in the future.
             if self.spotify_regex.is_match(&url) {
                 // nifty trick to avoid panics using let-else statements
                 // and add some context to the error, even if it's fugly
@@ -235,7 +239,7 @@ impl EventHandler for Handler {
             let _ = new_message.suppress_embeds(&ctx.http).await;
 
             // Update the conversions
-            util::increment_conversion().await;
+            let _ = util::increment_conversion().await; // tbh i dont care if this failes as the program itself does not depend on it
         }
     }
 }
@@ -249,6 +253,9 @@ static DB: Surreal<Client> = Surreal::init();
 
 #[tokio::main]
 async fn main() {
+    // Setup dotenv just in case someone used it instead (very useful for development)
+    dotenv().ok();
+
     // Setup the logger
     tracing_subscriber::fmt()
         .with_env_filter("cidar=trace")
