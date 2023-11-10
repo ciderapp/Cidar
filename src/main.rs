@@ -14,12 +14,8 @@ use serenity::model::Timestamp;
 use serenity::prelude::*;
 
 use dotenv::dotenv;
-use once_cell::sync::Lazy;
-use regex::Regex;
-use surrealdb::engine::remote::ws::Client;
-use surrealdb::Surreal;
-
 use log::*;
+use regex::Regex;
 
 mod api;
 mod commands;
@@ -244,12 +240,10 @@ impl EventHandler for Handler {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct Store {
-    total_conversions: u64,
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
+pub struct Stats {
+    pub total_conversions: u64,
 }
-
-static DB: Lazy<Surreal<Client>> = Lazy::new(Surreal::init);
 
 #[tokio::main]
 async fn main() {
@@ -271,8 +265,6 @@ async fn main() {
         release: sentry::release_name!(),
         ..Default::default()
     }));
-
-    util::connect_to_db().await;
 
     let developer_token: TokenLock = Default::default(); // We need this smart pointer to give to the thread that handles token updates
 

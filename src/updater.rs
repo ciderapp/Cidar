@@ -5,8 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use serenity::model::gateway::Activity;
 use serenity::model::user::OnlineStatus;
+use tokio::fs::OpenOptions;
 
-use crate::{util::{self, create_conversion_counter}, Store, TokenLock};
+use crate::{
+    util::{create_conversion_counter, read_json, CFG_PATH},
+    Stats, TokenLock,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TokenBody {
@@ -41,30 +45,24 @@ pub async fn token_updater(token: TokenLock) {
 pub async fn status_updater(ctx: serenity::prelude::Context) {
     let status = OnlineStatus::DoNotDisturb;
     loop {
-        // Assure we have connection to the DB
-        if crate::DB.health().await.is_err() {
-            error!("Connection to database lost, retrying...");
-            let _ = crate::DB.invalidate().await;
-            util::connect_to_db().await;
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            break;
-        }
-
-        let read_store: Option<Store> = crate::DB
-            .select(("stats", "conversions"))
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(CFG_PATH.join("stats.json"))
             .await
-            .unwrap_or(Some(Store::default()));
+            .expect("Unable to open stats.json");
 
-        if read_store.is_none() {
-            warn!("We are not able to read from the database for some reason, using defaults and trying to force creation, restart service or contact freehelpdesk@cider.sh for assistance");
-            create_conversion_counter().await;
-        }
+        let read_stats: Stats = match read_json(&mut file).await {
+            Ok(s) => s,
+            Err(_) => create_conversion_counter().await,
+        };
 
         let activity = Activity::listening(format!(
             "Cider | {} songs converted",
-            read_store.unwrap_or_default().total_conversions
+            read_stats.total_conversions
         ));
-        
+
         ctx.set_presence(Some(activity.clone()), status).await;
         tokio::time::sleep(Duration::from_secs(10)).await;
     }
